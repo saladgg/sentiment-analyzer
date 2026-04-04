@@ -1,0 +1,10 @@
+[
+    {
+        "text": "Refunds are processed within 30 days.",
+        "metadata": {"source": "policy_v1"}
+    },
+    {
+        "text": "Delayed shipments often cause negative sentiment.",
+        "metadata": {"source": "ops_guide"}
+    }
+]

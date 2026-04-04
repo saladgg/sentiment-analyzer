@@ -1,0 +1,30 @@
+# ==========================================================
+# sentiment-analyzer - .dockerignore
+# ----------------------------------------------------------
+# Excludes files from the Docker build context to keep
+# images small and avoid leaking secrets.
+# ==========================================================
+
+.git/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+*.duckdb
+*.duckdb.wal
+vector_store/
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+.qodo/
+*.md
+assets/
+tests/
+docker-compose.override.yml
