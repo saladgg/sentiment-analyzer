@@ -8,6 +8,7 @@ These endpoints support:
 """
 
 import uuid
+from typing import Annotated
 
 from fastapi import APIRouter, Body, File, UploadFile
 
@@ -24,7 +25,7 @@ store = VectorStore(settings.rag_db_path)
 # ---------------------------------------------------------------------
 @router.post("/documents")
 async def upload_document(
-    file: UploadFile = File(...),
+    file: Annotated[UploadFile, File(...)],
     namespace: str = "default",
 ):
     """
@@ -65,7 +66,7 @@ async def upload_document(
 # Retrieval preview (semantic search)
 # ---------------------------------------------------------------------
 @router.post("/retrieve")
-async def retrieve_context(payload: dict = Body(...)):
+async def retrieve_context(payload: Annotated[dict, Body(...)]):
     """
     Preview what context would be retrieved for a given query.
 
@@ -94,6 +95,7 @@ async def retrieve_context(payload: dict = Body(...)):
             results["documents"][0],
             results["metadatas"][0],
             results["distances"][0],
+            strict=True,
         )
     ]
 

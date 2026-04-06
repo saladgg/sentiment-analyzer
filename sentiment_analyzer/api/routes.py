@@ -2,6 +2,8 @@
 HTTP routes exposed to frontend clients.
 """
 
+from typing import Annotated
+
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from sentiment_analyzer.api.schemas import AnalysisRequest, AnalysisResponse
@@ -36,14 +38,14 @@ def analyze(request: AnalysisRequest):
 
 @router.post("/analyze/csv", response_model=AnalysisResponse)
 async def analyze_csv(
-    file: UploadFile = File(...),
+    file: Annotated[UploadFile, File(...)],
     sentiment_engine: str = "rule_based",
 ):
     """
     Analyze sentiment from a CSV file upload.
     """
     try:
-        if not file.filename.endswith(".csv"):
+        if not file.filename or not file.filename.endswith(".csv"):
             raise HTTPException(status_code=400, detail="Only CSV files are supported")
 
         adapter = CSVAdapter()
@@ -62,14 +64,14 @@ async def analyze_csv(
 
 @router.post("/analyze/excel", response_model=AnalysisResponse)
 async def analyze_excel(
-    file: UploadFile = File(...),
+    file: Annotated[UploadFile, File(...)],
     sentiment_engine: str = "rule_based",
 ):
     """
     Analyze sentiment from an Excel (.xlsx) file upload.
     """
     try:
-        if not file.filename.endswith(".xlsx"):
+        if not file.filename or not file.filename.endswith(".xlsx"):
             raise HTTPException(status_code=400, detail="Only .xlsx files are supported")
 
         adapter = ExcelAdapter()

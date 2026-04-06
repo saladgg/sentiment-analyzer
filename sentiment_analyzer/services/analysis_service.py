@@ -71,8 +71,8 @@ class AnalysisService:
 
             # Optional RAG enrichment (single, explicit call)
             if self.enricher:
-                rag_result = self.enricher.enrich(text) if self.enricher else None
-                if rag_result.context:
+                rag_result = self.enricher.enrich(text)
+                if rag_result and rag_result.context:
                     rag_used = True
                     rag_source_count += len(rag_result.sources)
             else:

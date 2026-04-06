@@ -23,7 +23,7 @@ class EvaluationHarness:
 
         Assumes labels are aligned.
         """
-        correct = sum(p == l for p, l in zip(predictions, labels))
+        correct = sum(p == label for p, label in zip(predictions, labels, strict=True))
         return correct / len(labels) if labels else 0.0
 
     def drift(self, scores_run_a: list[float], scores_run_b: list[float]) -> float:

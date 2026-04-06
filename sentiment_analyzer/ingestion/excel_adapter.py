@@ -7,7 +7,6 @@ Supports ingestion of Excel (.xlsx) files while remaining schema-agnostic.
 from typing import Any
 
 import pandas as pd
-
 from sentiment_analyzer.ingestion.base import InputAdapter
 
 

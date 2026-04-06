@@ -10,10 +10,11 @@ Used when higher semantic understanding is required
 compared to rule-based sentiment.
 """
 
+from sentiment_analyzer.sentiment.base import SentimentEngine
 from transformers import pipeline
 
 
-class HuggingFaceSentimentEngine:
+class HuggingFaceSentimentEngine(SentimentEngine):
     """
     Transformer-based sentiment engine.
 
@@ -22,10 +23,7 @@ class HuggingFaceSentimentEngine:
 
     def __init__(self, model_name: str):
         self.model_name = model_name
-        self.pipeline = pipeline(
-            "sentiment-analysis",
-            model=model_name,
-        )
+        self.pipeline = pipeline(task="text-classification", model=model_name)
 
     def analyze(self, text: str, context: str | None = None) -> dict:
         """

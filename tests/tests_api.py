@@ -3,7 +3,6 @@ Integration tests for the sentiment analysis API endpoints.
 """
 
 from fastapi.testclient import TestClient
-
 from sentiment_analyzer.main import app
 
 client = TestClient(app)

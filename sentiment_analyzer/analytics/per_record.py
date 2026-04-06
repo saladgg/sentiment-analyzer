@@ -25,7 +25,9 @@ def build_per_record_result(
         "record_id": record_id,
         "sentiment": sentiment_output["label"],
         "score": sentiment_output["score"],
-        "contributing_fields": sentiment_output.get("contributing_fields", {}),
+        "contributing_fields": {
+            k: float(v) for k, v in sentiment_output.get("drivers", {}).items()
+        },
         "rag": {
             "enabled": bool(rag_result),
             "sources": rag_result.sources if rag_result else [],

@@ -13,8 +13,6 @@
 
 SOURCE       := sentiment_analyzer
 VENV_PYTHON  := .venv/bin/python
-IMAGE_NAME   := sentiment-analyzer
-IMAGE_TAG    := latest
 
 # ----------------------------------------------------------
 # Help
@@ -55,25 +53,25 @@ update: ## Upgrade all dependency versions in the lockfile
 	uv lock --upgrade
 
 # ----------------------------------------------------------
-# Code Quality
+# Code Quality (target dirs configured in pyproject.toml)
 # ----------------------------------------------------------
 
 .PHONY: format
-format: ## Auto-format code with ruff
-	uv run ruff format $(SOURCE) tests
+format: ## Auto-format code
+	uv run ruff format
 
 .PHONY: format-check
-format-check: ## Check formatting without modifying files
-	uv run ruff format --check $(SOURCE) tests
+format-check: ## Check formatting without changes
+	uv run ruff format --check
 
 .PHONY: lint
 lint: ## Run linter and type checker
-	uv run ruff check $(SOURCE) tests
-	uv run mypy $(SOURCE)
+	uv run ruff check
+	uv run mypy
 
 .PHONY: fix
 fix: ## Auto-fix lint issues
-	uv run ruff check $(SOURCE) tests --fix
+	uv run ruff check --fix
 
 # ----------------------------------------------------------
 # Testing
@@ -92,35 +90,17 @@ run: ## Start the FastAPI dev server on port 8000
 	uv run uvicorn $(SOURCE).main:app --reload --host 0.0.0.0 --port 8000
 
 # ----------------------------------------------------------
-# Docker
+# Docker (managed via docker-compose.yml)
 # ----------------------------------------------------------
 
-.PHONY: docker-build
-docker-build: ## Build the Docker image
-	docker build -t $(IMAGE_NAME):$(IMAGE_TAG) .
-
-.PHONY: docker-run
-docker-run: ## Run the container on port 8000
-	docker run --rm -p 8000:8000 --env-file .env $(IMAGE_NAME):$(IMAGE_TAG)
-
 .PHONY: docker-up
-docker-up: ## Start services with docker compose
+docker-up: ## Build and start containers
 	docker compose up --build -d
 
 .PHONY: docker-down
-docker-down: ## Stop docker compose services
+docker-down: ## Stop and remove containers
 	docker compose down
 
 .PHONY: docker-logs
-docker-logs: ## Tail docker compose logs
+docker-logs: ## Tail container logs
 	docker compose logs -f
-
-# ----------------------------------------------------------
-# CI / Aggregate Targets
-# ----------------------------------------------------------
-
-.PHONY: check
-check: format-check lint test ## Run all CI checks (format, lint, test)
-
-.PHONY: all
-all: format lint test ## Format, lint, and test

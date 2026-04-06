@@ -7,12 +7,35 @@ Used as:
 - Deterministic audit-safe engine
 """
 
+from sentiment_analyzer.sentiment.base import SentimentEngine
 
-# POSITIVE_WORDS = {"good", "excellent", "happy", "love"}
-# NEGATIVE_WORDS = {"bad", "terrible", "hate", "poor"}
+POSITIVE_WORDS = {
+    "good",
+    "great",
+    "excellent",
+    "happy",
+    "love",
+    "wonderful",
+    "fantastic",
+    "amazing",
+    "best",
+    "like",
+}
+NEGATIVE_WORDS = {
+    "bad",
+    "terrible",
+    "hate",
+    "poor",
+    "worst",
+    "awful",
+    "horrible",
+    "disappointing",
+    "dislike",
+    "ugly",
+}
 
 
-class RuleBasedSentimentEngine:
+class RuleBasedSentimentEngine(SentimentEngine):
     """
     Deterministic rule-based sentiment engine.
 
@@ -35,20 +58,32 @@ class RuleBasedSentimentEngine:
         dict
             Sentiment label, score, and contributing drivers.
         """
-        score = 0.0
-        label = "neutral"
+        words = text.lower().split()
+        pos_hits = sum(1 for w in words if w in POSITIVE_WORDS)
+        neg_hits = sum(1 for w in words if w in NEGATIVE_WORDS)
+        total_hits = pos_hits + neg_hits
 
-        if "good" in text.lower():
-            score = 0.7
+        if total_hits == 0:
+            return {
+                "label": "neutral",
+                "score": 0.0,
+                "drivers": {"lexical_rules": 0.0},
+            }
+
+        score = (pos_hits - neg_hits) / total_hits
+        if score > 0:
             label = "positive"
-        elif "bad" in text.lower():
-            score = -0.7
+        elif score < 0:
             label = "negative"
+        else:
+            label = "neutral"
 
         return {
             "label": label,
             "score": score,
             "drivers": {
                 "lexical_rules": abs(score),
+                "positive_hits": pos_hits,
+                "negative_hits": neg_hits,
             },
         }

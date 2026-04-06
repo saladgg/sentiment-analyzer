@@ -20,7 +20,7 @@ It is built as a production-oriented backend suitable for batch analysis, experi
 - Pluggable sentiment engines:
   - Rule-based
   - Transformer-based (HuggingFace)
-  - LLM-backed (stub)
+  - LLM-backed (any provider via [litellm](https://docs.litellm.ai/) — OpenAI, Anthropic, Ollama, Groq, etc.)
 - Explainable per-record sentiment outputs
 - Dataset-level aggregation and summaries
 - Optional RAG-based sentiment context enrichment
@@ -33,7 +33,7 @@ It is built as a production-oriented backend suitable for batch analysis, experi
 
 ### Prerequisites
 
-- Python 3.10+
+- Python 3.13+
 - [uv](https://docs.astral.sh/uv/) (recommended) or pip
 
 ### Installation
@@ -58,7 +58,7 @@ cp .env.example .env
 ### Running the Server
 
 ```bash
-uvicorn sentiment_analyzer.main:app --reload
+make run
 ```
 
 The API will be available at `http://localhost:8000`.
@@ -66,14 +66,26 @@ The API will be available at `http://localhost:8000`.
 ### Running Tests
 
 ```bash
-pytest tests/
+make test
+```
+
+### Code Quality
+
+```bash
+make lint          # ruff + mypy
+make format        # auto-format
+make fix           # auto-fix lint issues
 ```
 
 ### Docker
 
 ```bash
-docker compose up --build
+make docker-up     # build and start
+make docker-down   # stop
+make docker-logs   # tail logs
 ```
+
+Run `make help` to see all available targets.
 
 ---
 
@@ -114,7 +126,7 @@ Run sentiment analysis on JSON or text data.
 | ------------------ | -------- | -------------- | ------------------------------------------------ |
 | `data`             | any      | required       | List of dicts (JSON rows) or a plain text string |
 | `source_type`      | string   | required       | One of `json`, `csv`, `excel`, `text`            |
-| `sentiment_engine` | string   | `"rule_based"` | One of `rule_based`, `hf_transformer`            |
+| `sentiment_engine` | string   | `"rule_based"` | One of `rule_based`, `hf_transformer`, `llm`     |
 
 **Response:**
 
@@ -127,7 +139,7 @@ Run sentiment analysis on JSON or text data.
       "record_id": 0,
       "sentiment": "positive",
       "score": 0.85,
-      "contributing_fields": ["comment"]
+      "contributing_fields": {"lexical_rules": 1.0, "positive_hits": 1, "negative_hits": 0}
     }
   ],
   "anomalies": [],
@@ -301,6 +313,12 @@ Retrieve relevant context chunks via semantic search.
   }
 ]
 ```
+
+---
+
+## CI
+
+GitHub Actions runs lint, type checking, and tests on every push to `main` and on pull requests. See [.github/workflows/ci.yml](.github/workflows/ci.yml).
 
 ---
 

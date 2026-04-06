@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     hf_sentiment_model: str = "distilbert-base-uncased-finetuned-sst-2-english"
 
     # -------------------------
+    # LLM Engine (any litellm-supported provider)
+    # -------------------------
+    llm_api_key: str = ""
+    llm_model: str = "claude-sonnet-4-20250514"
+
+    # -------------------------
     # RAG configuration
     # -------------------------
     # Visit scripts/bootstrap_rag_store.py for better context.

@@ -55,11 +55,11 @@ class VectorStore:
 
         ids = [f"{document_id}:{i}" for i in range(len(texts))]
 
-        metadatas = [
+        metadatas: list[dict[str, str | int]] = [
             {
                 "document_id": document_id,
-                "namespace": namespace,
-                "source": source,
+                "namespace": namespace or "",
+                "source": source or "",
                 "chunk_index": i,
             }
             for i in range(len(texts))
@@ -68,7 +68,7 @@ class VectorStore:
         self.collection.add(
             documents=texts,
             ids=ids,
-            metadatas=metadatas,
+            metadatas=metadatas,  # type: ignore[arg-type]
         )
 
         return len(texts)
@@ -86,12 +86,12 @@ class VectorStore:
         """
         Retrieve similar documents from the vector store.
         """
-        where = {"namespace": namespace} if namespace else None
+        where: dict[str, str] | None = {"namespace": namespace} if namespace else None
 
         return self.collection.query(
             query_texts=[query],
             n_results=top_k,
-            where=where,
+            where=where,  # type: ignore[arg-type]
         )
 
     # ------------------------------------------------------------------
@@ -101,7 +101,7 @@ class VectorStore:
         """
         Delete all chunks belonging to a document.
         """
-        self.collection.delete(where={"document_id": document_id})
+        self.collection.delete(where={"document_id": document_id})  # type: ignore[arg-type]
 
     def list_documents(self):
         """
@@ -109,11 +109,12 @@ class VectorStore:
         """
         results = self.collection.get(include=["metadatas"])
 
-        seen = {}
-        for meta in results.get("metadatas", []):
+        seen: dict[str, dict] = {}
+        metadatas = results.get("metadatas") or []
+        for meta in metadatas:
             doc_id = meta.get("document_id")
-            if doc_id and doc_id not in seen:
-                seen[doc_id] = {
+            if doc_id and str(doc_id) not in seen:
+                seen[str(doc_id)] = {
                     "document_id": doc_id,
                     "namespace": meta.get("namespace"),
                     "source": meta.get("source"),
@@ -133,7 +134,7 @@ class VectorStore:
         This is intended for administrative & UI purposes,
         not semantic retrieval.
         """
-        where = {}
+        where: dict[str, str | dict[str, str]] = {}
 
         if namespace:
             where["namespace"] = namespace
@@ -142,15 +143,16 @@ class VectorStore:
             where["source"] = {"$contains": source_contains}
 
         results = self.collection.get(
-            where=where or None,
+            where=where or None,  # type: ignore[arg-type]
             include=["metadatas"],
         )
 
-        seen = {}
-        for meta in results.get("metadatas", []):
+        seen: dict[str, dict] = {}
+        metadatas = results.get("metadatas") or []
+        for meta in metadatas:
             doc_id = meta.get("document_id")
-            if doc_id and doc_id not in seen:
-                seen[doc_id] = {
+            if doc_id and str(doc_id) not in seen:
+                seen[str(doc_id)] = {
                     "document_id": doc_id,
                     "namespace": meta.get("namespace"),
                     "source": meta.get("source"),

@@ -27,16 +27,21 @@ Future direction:
 This script should not be used in production request paths.
 """
 
-from sentiment_analyzer.rag.store import VectorStore
+from sentiment_analyzer.core.config import settings
+from sentiment_analyzer.rag.vector_store import VectorStore
 
-store = VectorStore()
+store = VectorStore(settings.vector_store_path)
 
 documents = [
-    {"text": "Refunds are processed within 30 days.", "metadata": {"source": "policy_v1"}},
+    {"text": "Refunds are processed within 30 days.", "source": "policy_v1"},
     {
         "text": "Delayed shipments often cause negative sentiment.",
-        "metadata": {"source": "ops_guide"},
+        "source": "ops_guide",
     },
 ]
 
-store.add_documents(documents)
+for doc in documents:
+    store.add(
+        texts=[doc["text"]],
+        source=doc["source"],
+    )
