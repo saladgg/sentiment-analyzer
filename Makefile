@@ -89,6 +89,10 @@ test: ## Run test suite with coverage
 run: ## Start the FastAPI dev server on port 8000
 	uv run uvicorn $(SOURCE).main:app --reload --host 0.0.0.0 --port 8000
 
+.PHONY: frontend
+frontend: ## Start the Streamlit frontend on port 8501
+	uv run streamlit run frontend/app.py
+
 # ----------------------------------------------------------
 # Docker (managed via docker-compose.yml)
 # ----------------------------------------------------------

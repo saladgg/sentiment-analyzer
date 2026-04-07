@@ -1,5 +1,16 @@
 # SentimentAnalyzer
 
+![Python](https://img.shields.io/badge/Python-3.13+-blue)
+![FastAPI](https://img.shields.io/badge/FastAPI-Backend-green)
+![Streamlit](https://img.shields.io/badge/Streamlit-Frontend-red)
+![HuggingFace](https://img.shields.io/badge/HuggingFace-Transformers-yellow)
+![LiteLLM](https://img.shields.io/badge/LiteLLM-Multi--Provider-orange)
+![ChromaDB](https://img.shields.io/badge/ChromaDB-RAG-purple)
+![DuckDB](https://img.shields.io/badge/DuckDB-Persistence-blue)
+![Docker](https://img.shields.io/badge/Docker-Containerized-blue)
+![Tests](https://img.shields.io/badge/Tests-pytest-green)
+![License](https://img.shields.io/badge/License-MIT-brightgreen)
+
 **SentimentAnalyzer** is an input-agnostic, explainable sentiment analysis platform designed for structured and semi-structured datasets.
 
 Unlike traditional sentiment APIs that return raw labels, this system focuses on:
@@ -9,7 +20,7 @@ Unlike traditional sentiment APIs that return raw labels, this system focuses on
 - Evaluation
 - Deterministic re-runs
 
-It is built as a production-oriented backend suitable for batch analysis, experimentation, and future UI integration.
+It is built as a production-oriented platform suitable for batch analysis, experimentation, and interactive exploration via its Streamlit frontend.
 
 ---
 
@@ -26,6 +37,7 @@ It is built as a production-oriented backend suitable for batch analysis, experi
 - Optional RAG-based sentiment context enrichment
 - Offline evaluation harness (accuracy, drift-ready)
 - Deterministic, auditable runs
+- Streamlit frontend with interactive analysis, run history, and RAG management
 
 ---
 
@@ -62,6 +74,20 @@ make run
 ```
 
 The API will be available at `http://localhost:8000`.
+
+### Running the Frontend
+
+```bash
+make frontend
+```
+
+The Streamlit UI will be available at `http://localhost:8501`.
+
+The frontend provides three pages:
+
+- **Analyze** — Upload CSV/Excel or paste JSON, pick a sentiment engine, and view interactive results with charts, per-record scores, anomalies, and explanations.
+- **Run History** — Browse past analysis runs and compare two runs side-by-side (e.g. base vs. RAG-enriched).
+- **RAG Management** — Upload context documents, manage the vector store, and preview semantic retrieval results.
 
 ### Running Tests
 
@@ -339,4 +365,9 @@ sentiment_analyzer/
   storage/          # Run persistence
 tests/              # Test suite
 assets/             # Sample data files
+frontend/
+  app.py            # Streamlit entry point
+  api_client.py     # HTTP client for the FastAPI backend
+  theme.py          # Shared constants (colors, engine labels)
+  pages/            # Streamlit pages (analyze, history, rag)
 ```

@@ -64,6 +64,11 @@ dependencies = [
 
   # Utilities
   "tqdm>=4.67.1",
+
+  # Frontend
+  "streamlit>=1.56.0",
+  "plotly>=6.1.0",
+  "requests>=2.32.0",
 ]
 
 [dependency-groups]
