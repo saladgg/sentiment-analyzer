@@ -8,7 +8,7 @@
 ![ChromaDB](https://img.shields.io/badge/ChromaDB-RAG-purple)
 ![DuckDB](https://img.shields.io/badge/DuckDB-Persistence-blue)
 ![Docker](https://img.shields.io/badge/Docker-Containerized-blue)
-![Tests](https://img.shields.io/badge/Tests-pytest-green)
+[![Coverage Status](https://coveralls.io/repos/github/saladgg/sentiment-analyzer/badge.svg)](https://coveralls.io/github/saladgg/sentiment-analyzer)
 ![License](https://img.shields.io/badge/License-MIT-brightgreen)
 
 **SentimentAnalyzer** is an input-agnostic, explainable sentiment analysis platform designed for structured and semi-structured datasets.

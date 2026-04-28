@@ -12,7 +12,7 @@ never hard-coded elsewhere.
 """
 
 from pydantic import Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -21,6 +21,13 @@ class Settings(BaseSettings):
 
     Values can be overridden via environment variables.
     """
+
+    # AllSentimentAnalyzer(ASA)
+    model_config = SettingsConfigDict(
+        env_prefix="ASA_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+    )
 
     # Application
     app_name: str = "SentimentAnalyzer"
@@ -57,12 +64,6 @@ class Settings(BaseSettings):
     # Storage
     # -------------------------
     rag_db_path: str = "runs.duckdb"
-
-    class Config:
-        # AllSentimentAnalyzer(ASA)
-        env_prefix = "ASA_"
-        env_file = ".env"
-        env_file_encoding = "utf-8"
 
 
 settings = Settings()

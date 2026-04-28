@@ -40,6 +40,7 @@ dependencies = [
   # Data Processing
   "pandas>=2.3.3",
   "numpy>=2.4.0",
+  "openpyxl>=3.1",
 
   # Classical ML
   "scikit-learn>=1.8.0",
@@ -89,7 +90,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/saladgg/sentiment-analyzer"
+Homepage = "https://github.com/saladgg/sentiment-analyzer" # todo
+Repository = "https://github.com/saladgg/sentiment-analyzer"
+Documentation = "https://github.com/saladgg/sentiment-analyzer/docs"
 Changelog = "https://github.com/saladgg/sentiment-analyzer/releases"
 
 # ----------------------------------------------------------
@@ -125,6 +128,10 @@ testpaths = ["tests"]
 python_files = "test_*.py"
 asyncio_mode = "auto"
 addopts = "-ra -q --cov=sentiment_analyzer --cov-report=term-missing"
+filterwarnings = [
+    # Upstream: chromadb still uses ``asyncio.iscoroutinefunction``.
+    "ignore:'asyncio.iscoroutinefunction' is deprecated:DeprecationWarning:chromadb.*",
+]
 
 [tool.coverage.run]
 branch = true
@@ -138,3 +145,29 @@ skip_covered = false
 strict = false
 ignore_missing_imports = true
 files = ["sentiment_analyzer", "tests"]
+
+# ----------------------------------------------------------
+# PSR Configuration
+# ----------------------------------------------------------
+
+
+[tool.semantic_release]
+commit_parser = "conventional"
+version_toml = [
+    "pyproject.toml:project.version:tf"
+]
+branch = "main"
+build_command = "python -m build"
+
+[tool.semantic_release.publish]
+upload_to_vcs_release = true
+dist_glob_patterns = ["dist/*"]
+
+[tool.semantic_release.changelog.default_templates]
+changelog_file = "CHANGELOG.md"
+mask_initial_release = false # Override default behavior of suppressing detailed changelog on first version
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = ["feat", "fix", "perf", "refactor", "docs", "chore", "build", "ci", "test", "style"]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf", "refactor"]   # refactor is often patch, but some teams treat it as minor
