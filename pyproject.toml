@@ -4,7 +4,7 @@
 
 [project]
 name = "sentiment-analyzer"
-version = "0.1.1"
+version = "v1.0.0"
 description = "Input-agnostic, explainable sentiment analysis platform with optional RAG-based context enrichment."
 readme = "README.md"
 requires-python = ">=3.13"
