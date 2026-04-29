@@ -348,6 +348,23 @@ GitHub Actions runs lint, type checking, and tests on every push to `main` and o
 
 ---
 
+## Documentation
+
+Detailed reference docs live in [docs/](docs/README.md):
+
+| Doc | Topic |
+| --- | --- |
+| [Architecture](docs/architecture.md) | System layers, request lifecycle, module responsibilities |
+| [Configuration](docs/configuration.md) | All `ASA_*` environment variables and the `.env` workflow |
+| [Engines](docs/engines.md) | Rule-based, HuggingFace transformer, and LLM engines — and how to add your own |
+| [RAG](docs/rag.md) | Vector store, enrichment pipeline, run comparison |
+| [API reference](docs/api-reference.md) | Full HTTP API with schemas and `curl` examples |
+| [Data model](docs/data-model.md) | Pydantic schemas, internal record shape, persistence layout |
+| [Frontend](docs/frontend.md) | Streamlit pages and how they call the backend |
+| [Development](docs/development.md) | Local setup, testing, lint, Docker, releases, CI |
+
+---
+
 ## Project Structure
 
 ```
