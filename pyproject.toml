@@ -186,7 +186,15 @@ version_toml = [
     "pyproject.toml:project.version:nf"
 ]
 branch = "main"
-build_command = "python -m build"
+# semantic-release stamps the new version into pyproject.toml; uv.lock also
+# records the project version, so refresh it and stage it into the release
+# commit. Otherwise the tagged tree has a stale lock and every
+# `uv sync --locked` (e.g. the Docker build of the release tag) fails.
+build_command = """
+uv lock
+git add uv.lock
+uv build
+"""
 
 [tool.semantic_release.publish]
 upload_to_vcs_release = true
