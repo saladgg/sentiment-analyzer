@@ -10,8 +10,6 @@ from sentiment_analyzer.storage.runs import RunStore
 
 router = APIRouter(prefix="/runs", tags=["Runs"])
 
-store = RunStore(settings.rag_db_path)
-
 
 @router.get("/compare")
 def compare_runs_endpoint(
@@ -25,6 +23,7 @@ def compare_runs_endpoint(
     - base_run_id: run without RAG
     - rag_run_id: run with RAG
     """
+    store = RunStore(settings.rag_db_path)
     base = store.get_run(base_run_id)
     rag = store.get_run(rag_run_id)
 

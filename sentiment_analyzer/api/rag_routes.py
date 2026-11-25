@@ -17,7 +17,7 @@ from sentiment_analyzer.rag.vector_store import VectorStore
 
 router = APIRouter(prefix="/rag", tags=["RAG"])
 
-store = VectorStore(settings.rag_db_path)
+store = VectorStore(settings.vector_store_path)
 
 
 # ---------------------------------------------------------------------

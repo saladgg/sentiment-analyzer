@@ -37,8 +37,8 @@ class TestAnalysisService:
         assert len(result["records"]) == 2
         assert result["rag"] is None  # RAG disabled in this fixture
 
-    def test_unknown_engine_raises_keyerror(self, isolated_settings, records):
-        with pytest.raises(KeyError):
+    def test_unknown_engine_raises_valueerror(self, isolated_settings, records):
+        with pytest.raises(ValueError, match="Unknown sentiment engine"):
             AnalysisService().run(data=records, source_type="json", sentiment_engine="???")
 
 

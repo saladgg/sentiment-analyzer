@@ -1,8 +1,19 @@
 name: CI
 
+# main is covered by release.yml, which calls this workflow as a gate
+# before releasing, so it is excluded here to avoid running twice.
 on:
   push:
-    branches: [main]
+    branches-ignore: [main]
+  pull_request:
+  workflow_call:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   lint-test:
@@ -16,11 +27,11 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Install dev dependencies
-        run: make install-dev
+      - name: Install dev dependencies (fail on a stale lockfile)
+        run: uv sync --locked --group dev
 
       - name: Format check
-        run: make format
+        run: make format-check
 
       - name: Lint
         run: make lint

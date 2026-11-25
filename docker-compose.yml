@@ -15,8 +15,14 @@ services:
       - "8000:8000"
     env_file:
       - .env
+    environment:
+      # Pin all mutable state onto the volume. These take precedence over
+      # .env, whose relative defaults are meant for local (non-Docker) runs.
+      ASA_RAG_DB_PATH: /app/data/runs.duckdb
+      ASA_VECTOR_STORE_PATH: /app/data/vector_store
+      HF_HOME: /app/data/hf
     volumes:
-      # Persist DuckDB run storage and vector store across restarts
+      # Persist DuckDB run storage, vector store and model cache across restarts
       - run-data:/app/data
     restart: unless-stopped
     healthcheck:

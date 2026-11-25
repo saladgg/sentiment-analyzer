@@ -4,26 +4,30 @@ on:
   push:
     branches: [main]
 
-permissions:
-  contents: write   # required to create tags & releases
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
+  ci:
+    name: CI gate
+    uses: ./.github/workflows/ci.yml
+
   release:
+    name: Semantic release
+    needs: ci   # never release a commit that fails lint/tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # required to create tags & releases
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0   # REQUIRED for semantic-release
+
       - name: Fetch all tags
         run: git fetch --force --tags
-
-      - name: Debug Git state
-        run: |
-          git tag
-          git log --oneline -5
-          git describe --tags --abbrev=0 || echo "No tags found"
 
       - name: Set up Python
         uses: actions/setup-python@v5

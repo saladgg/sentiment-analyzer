@@ -2,28 +2,43 @@
 Persistent vector store abstraction.
 
 Responsibilities:
-- Store embedded chunks
+- Store embedded chunks on disk (survives restarts)
 - Support similarity search
 - Apply namespace filtering
 - Enable document-level deletion & listing
 """
 
 import uuid
+from typing import Any
 
-from chromadb import Client
+import chromadb
 from chromadb.config import Settings
+
+COLLECTION_NAME = "rag_context"
+
+# Every client for a given path must be created with identical settings,
+# otherwise Chroma refuses to open a second client in the same process.
+_CLIENT_SETTINGS = Settings(anonymized_telemetry=False)
 
 
 class VectorStore:
-    def __init__(self, path: str):
-        self.client = Client(
-            Settings(
-                persist_directory=path,
-                anonymized_telemetry=False,
-            )
-        )
+    def __init__(self, path: str, embedding_function: Any | None = None):
+        """
+        Open (or create) a persistent Chroma store at ``path``.
 
-        self.collection = self.client.get_or_create_collection(name="rag_context")
+        ``path`` is a directory. It must not point at a file, e.g. the
+        DuckDB runs database.
+
+        ``embedding_function`` defaults to Chroma's built-in ONNX
+        all-MiniLM-L6-v2 embedder; tests inject a deterministic stub.
+        """
+        self.path = path
+        self.client = chromadb.PersistentClient(path=path, settings=_CLIENT_SETTINGS)
+
+        kwargs: dict[str, Any] = {"name": COLLECTION_NAME}
+        if embedding_function is not None:
+            kwargs["embedding_function"] = embedding_function
+        self.collection = self.client.get_or_create_collection(**kwargs)
 
     # ------------------------------------------------------------------
     # WRITE PATH
@@ -42,7 +57,7 @@ class VectorStore:
         Args:
             texts: List of text chunks to embed & store
             document_id: Stable document identifier
-            namespace: Logical namespace (e.g. project, tenant)
+            namespace: Logical grouping label (not an access boundary)
             source: Human-readable source (filename, URL)
 
         Returns:
@@ -107,20 +122,7 @@ class VectorStore:
         """
         List unique documents stored in the vector DB.
         """
-        results = self.collection.get(include=["metadatas"])
-
-        seen: dict[str, dict] = {}
-        metadatas = results.get("metadatas") or []
-        for meta in metadatas:
-            doc_id = meta.get("document_id")
-            if doc_id and str(doc_id) not in seen:
-                seen[str(doc_id)] = {
-                    "document_id": doc_id,
-                    "namespace": meta.get("namespace"),
-                    "source": meta.get("source"),
-                }
-
-        return list(seen.values())
+        return self.search_documents()
 
     def search_documents(
         self,
@@ -134,16 +136,10 @@ class VectorStore:
         This is intended for administrative & UI purposes,
         not semantic retrieval.
         """
-        where: dict[str, str | dict[str, str]] = {}
-
-        if namespace:
-            where["namespace"] = namespace
-
-        if source_contains:
-            where["source"] = {"$contains": source_contains}
+        where = {"namespace": namespace} if namespace else None
 
         results = self.collection.get(
-            where=where or None,  # type: ignore[arg-type]
+            where=where,  # type: ignore[arg-type]
             include=["metadatas"],
         )
 
@@ -151,6 +147,9 @@ class VectorStore:
         metadatas = results.get("metadatas") or []
         for meta in metadatas:
             doc_id = meta.get("document_id")
+            # Chroma metadata filters have no substring operator; filter here.
+            if source_contains and source_contains not in str(meta.get("source") or ""):
+                continue
             if doc_id and str(doc_id) not in seen:
                 seen[str(doc_id)] = {
                     "document_id": doc_id,

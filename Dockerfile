@@ -34,16 +34,23 @@ FROM python:3.13-slim AS runtime
 LABEL maintainer="Salad Guyo <saladguyo60@gmail.com>"
 LABEL description="Input-agnostic, explainable sentiment analysis platform"
 
-# Prevent Python from writing .pyc files and enable unbuffered output
+# Prevent Python from writing .pyc files and enable unbuffered output.
+# All mutable state (run history, vector store, model cache) lives under
+# /app/data, which docker-compose mounts as a named volume.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PATH="/app/.venv/bin:$PATH"
+    PATH="/app/.venv/bin:$PATH" \
+    ASA_RAG_DB_PATH=/app/data/runs.duckdb \
+    ASA_VECTOR_STORE_PATH=/app/data/vector_store \
+    HF_HOME=/app/data/hf
 
 WORKDIR /app
 
 # Copy the virtual environment and source from the builder
 COPY --from=builder /build/.venv /app/.venv
 COPY --from=builder /build/sentiment_analyzer /app/sentiment_analyzer
+
+RUN mkdir -p /app/data
 
 # Expose the default FastAPI port
 EXPOSE 8000

@@ -34,21 +34,54 @@ class TestAnalyzeJSON:
         response = client.post("/api/analyze", json={"data": []})
         assert response.status_code == 422
 
-    def test_unknown_engine_propagates_keyerror(self, client):
-        # ``TestClient`` re-raises server-side exceptions by default — assert
-        # that an unknown engine surfaces as a ``KeyError`` rather than being
-        # silently swallowed.
-        import pytest
+    def test_unknown_engine_returns_422(self, client):
+        response = client.post(
+            "/api/analyze",
+            json={
+                "source_type": "json",
+                "sentiment_engine": "does-not-exist",
+                "data": [{"text": "hello"}],
+            },
+        )
+        assert response.status_code == 422
 
-        with pytest.raises(KeyError):
-            client.post(
-                "/api/analyze",
-                json={
-                    "source_type": "json",
-                    "sentiment_engine": "does-not-exist",
-                    "data": [{"text": "hello"}],
-                },
-            )
+    def test_engine_defaults_to_configured_default(self, client, analyze_payload, monkeypatch):
+        from sentiment_analyzer.core import config as config_module
+
+        monkeypatch.setattr(config_module.settings, "default_sentiment_engine", "hf_transformer")
+        payload = {k: v for k, v in analyze_payload.items() if k != "sentiment_engine"}
+        response = client.post("/api/analyze", json=payload)
+        assert response.status_code == 200
+        # The HF stub reports ``model_confidence``; rule_based never does.
+        assert "model_confidence" in response.json()["records"][0]["contributing_fields"]
+
+    def test_unknown_source_type_returns_422(self, client):
+        response = client.post(
+            "/api/analyze", json={"source_type": "pdf", "data": [{"text": "hello"}]}
+        )
+        assert response.status_code == 422
+
+
+class TestAnalyzeText:
+    def test_plain_text_one_record_per_line(self, client):
+        response = client.post(
+            "/api/analyze",
+            json={"source_type": "text", "data": "I love it\n\nterrible\nok"},
+        )
+        assert response.status_code == 200
+        labels = [r["sentiment"] for r in response.json()["records"]]
+        # Short lines are still analyzed: text input skips field detection.
+        assert labels == ["positive", "negative", "neutral"]
+
+    def test_text_source_requires_string(self, client):
+        response = client.post(
+            "/api/analyze", json={"source_type": "text", "data": [{"text": "hi"}]}
+        )
+        assert response.status_code == 422
+
+    def test_json_source_rejects_string(self, client):
+        response = client.post("/api/analyze", json={"source_type": "json", "data": "hello"})
+        assert response.status_code == 422
 
 
 class TestAnalyzeCSV:
@@ -57,10 +90,28 @@ class TestAnalyzeCSV:
         response = client.post(
             "/api/analyze/csv",
             files={"file": ("input.csv", csv, "text/csv")},
-            data={"sentiment_engine": "rule_based"},
         )
         assert response.status_code == 200
         assert len(response.json()["records"]) == 2
+
+    def test_engine_query_param_is_honoured(self, client):
+        csv = io.BytesIO(b"comment\ngood product overall\n")
+        response = client.post(
+            "/api/analyze/csv",
+            files={"file": ("input.csv", csv, "text/csv")},
+            params={"sentiment_engine": "hf_transformer"},
+        )
+        assert response.status_code == 200
+        assert "model_confidence" in response.json()["records"][0]["contributing_fields"]
+
+    def test_unknown_engine_query_param_returns_422(self, client):
+        csv = io.BytesIO(b"comment\ngood product overall\n")
+        response = client.post(
+            "/api/analyze/csv",
+            files={"file": ("input.csv", csv, "text/csv")},
+            params={"sentiment_engine": "nope"},
+        )
+        assert response.status_code == 422
 
     def test_rejects_non_csv_filename(self, client):
         response = client.post(
@@ -106,6 +157,18 @@ class TestEvaluationEndpoint:
 
 
 class TestRunCompareEndpoint:
+    def test_compares_two_real_runs(self, client, analyze_payload):
+        first = client.post("/api/analyze", json=analyze_payload).json()["run_id"]
+        second = client.post("/api/analyze", json=analyze_payload).json()["run_id"]
+
+        response = client.get(
+            "/api/runs/compare", params={"base_run_id": first, "rag_run_id": second}
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["base_run_id"] == first
+        assert "comparison" in body
+
     def test_404_when_runs_missing(self, client):
         response = client.get(
             "/api/runs/compare",

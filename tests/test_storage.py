@@ -37,6 +37,10 @@ class TestRunStore:
         assert loaded["run_id"] == "run-1"
         assert loaded["engine"] == "llm"
 
+    def test_get_run_decodes_summary(self, store):
+        _save(store, "run-2", total_records=3)
+        assert store.get_run("run-2")["summary"] == {"total_records": 3}
+
     def test_get_run_returns_none_when_missing(self, store):
         assert store.get_run("does-not-exist") is None
 

@@ -21,7 +21,7 @@ class RAGContextEnricher:
 
     def __init__(self):
         self.enabled = settings.rag_enabled
-        self.store = VectorStore(settings.rag_db_path)
+        self.store = VectorStore(settings.vector_store_path)
 
     def enrich(self, text: str) -> RAGResult | None:
         """Retrieve and assemble RAG context for the given text."""

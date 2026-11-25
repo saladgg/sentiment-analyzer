@@ -12,6 +12,11 @@ import json
 import duckdb
 
 
+def _decode_json(value):
+    """DuckDB returns JSON columns as ``str``; decode them to Python objects."""
+    return json.loads(value) if isinstance(value, str) else value
+
+
 class RunStore:
     """
     Persistence layer for sentiment analysis runs.
@@ -83,7 +88,7 @@ class RunStore:
             {
                 "run_id": row[0],
                 "engine": row[1],
-                "summary": json.loads(row[2]) if isinstance(row[2], str) else row[2],
+                "summary": _decode_json(row[2]),
                 "rag_enabled": row[3],
                 "created_at": row[4],
             }
@@ -105,5 +110,5 @@ class RunStore:
         return {
             "run_id": result[0],
             "engine": result[1],
-            "summary": result[2],
+            "summary": _decode_json(result[2]),
         }

@@ -22,6 +22,7 @@ from sentiment_analyzer.api.schemas import RecordSentiment
 from sentiment_analyzer.core.config import settings
 from sentiment_analyzer.core.logging import logger
 from sentiment_analyzer.ingestion.json_adapter import JSONAdapter
+from sentiment_analyzer.ingestion.text_adapter import TEXT_FIELD, TextAdapter
 from sentiment_analyzer.processing.field_detector import detect_text_fields
 from sentiment_analyzer.processing.normalizer import normalize_record
 from sentiment_analyzer.processing.validator import validate_record
@@ -46,17 +47,23 @@ class AnalysisService:
 
         self.enricher = RAGContextEnricher() if settings.rag_enabled else None
 
-    def run(self, data, source_type: str, sentiment_engine: str) -> dict:
+    def run(self, data, source_type: str, sentiment_engine: str | None = None) -> dict:
         """Execute a full analysis pipeline and return structured results."""
+        sentiment_engine = str(sentiment_engine or settings.default_sentiment_engine)
+        if sentiment_engine not in self.sentiment_engines:
+            raise ValueError(f"Unknown sentiment engine: {sentiment_engine!r}")
         run_id = str(uuid.uuid4())
         rag_used = False
         rag_source_count = 0
         logger.info("analysis_started", run_id=run_id)
 
-        adapter = JSONAdapter()
-        raw_records = adapter.load(data)
+        if source_type == "text":
+            raw_records = TextAdapter().load(data)
+            text_fields = [TEXT_FIELD]
+        else:
+            raw_records = JSONAdapter().load(data)
+            text_fields = detect_text_fields(raw_records)
 
-        text_fields = detect_text_fields(raw_records)
         engine = self.sentiment_engines[sentiment_engine]
 
         per_record_results: list[dict] = []

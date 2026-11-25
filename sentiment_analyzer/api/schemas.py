@@ -7,9 +7,21 @@ These schemas are intentionally explicit to:
 - Guarantee deterministic responses
 """
 
-from typing import Any
+from enum import StrEnum
+from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
+
+
+class EngineName(StrEnum):
+    """Sentiment engines selectable by clients."""
+
+    RULE_BASED = "rule_based"
+    HF_TRANSFORMER = "hf_transformer"
+    LLM = "llm"
+
+
+SourceType = Literal["json", "csv", "excel", "text"]
 
 
 class AnalysisRequest(BaseModel):
@@ -17,18 +29,29 @@ class AnalysisRequest(BaseModel):
     Represents a sentiment analysis request.
 
     data:
-        Raw input payload. Can be:
-        - List of dicts (JSON rows)
-        - Plain text string
+        Raw input payload:
+        - List of dicts (JSON rows) for ``json`` / ``csv`` / ``excel``
+        - Plain text string for ``text`` (one record per non-empty line)
     source_type:
         Explicit source identifier: 'csv', 'excel', 'json', 'text'
     sentiment_engine:
-        Which sentiment engine to use.
+        Which sentiment engine to use. Defaults to
+        ``ASA_DEFAULT_SENTIMENT_ENGINE``.
     """
 
-    data: Any
-    source_type: str
-    sentiment_engine: str = "rule_based"
+    data: list[dict[str, Any]] | str
+    source_type: SourceType
+    sentiment_engine: EngineName | None = None
+
+    @model_validator(mode="after")
+    def _data_matches_source_type(self) -> "AnalysisRequest":
+        if self.source_type == "text" and not isinstance(self.data, str):
+            raise ValueError("source_type 'text' requires 'data' to be a string")
+        if self.source_type != "text" and isinstance(self.data, str):
+            raise ValueError(
+                f"source_type '{self.source_type}' requires 'data' to be a list of objects"
+            )
+        return self
 
     model_config = {
         "json_schema_extra": {

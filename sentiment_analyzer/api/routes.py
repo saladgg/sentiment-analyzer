@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
-from sentiment_analyzer.api.schemas import AnalysisRequest, AnalysisResponse
+from sentiment_analyzer.api.schemas import AnalysisRequest, AnalysisResponse, EngineName
 from sentiment_analyzer.core.config import settings
 from sentiment_analyzer.core.logging import logger
 from sentiment_analyzer.ingestion.csv_adapter import CSVAdapter
@@ -39,7 +39,7 @@ def analyze(request: AnalysisRequest):
 @router.post("/analyze/csv", response_model=AnalysisResponse)
 async def analyze_csv(
     file: Annotated[UploadFile, File(...)],
-    sentiment_engine: str = "rule_based",
+    sentiment_engine: EngineName | None = None,
 ):
     """
     Analyze sentiment from a CSV file upload.
@@ -65,7 +65,7 @@ async def analyze_csv(
 @router.post("/analyze/excel", response_model=AnalysisResponse)
 async def analyze_excel(
     file: Annotated[UploadFile, File(...)],
-    sentiment_engine: str = "rule_based",
+    sentiment_engine: EngineName | None = None,
 ):
     """
     Analyze sentiment from an Excel (.xlsx) file upload.

@@ -12,11 +12,16 @@ Provides:
 
 from __future__ import annotations
 
+import hashlib
 import os
+import tempfile
 from collections.abc import Iterator
 from typing import Any
 
+import numpy as np
 import pytest
+from chromadb import Documents, EmbeddingFunction
+from chromadb.api.types import Embeddings, Space
 
 # ---------------------------------------------------------------------------
 # Environment isolation — applied before any sentiment_analyzer import that
@@ -24,6 +29,54 @@ import pytest
 # ---------------------------------------------------------------------------
 os.environ.setdefault("ASA_RAG_ENABLED", "false")
 os.environ.setdefault("ASA_LLM_API_KEY", "test-key")
+# Never let the suite create a Chroma store inside the repository.
+os.environ["ASA_VECTOR_STORE_PATH"] = tempfile.mkdtemp(prefix="asa-test-vectors-")
+
+
+class FakeEmbeddingFunction(EmbeddingFunction[Documents]):
+    """
+    Deterministic, offline embedding function for Chroma.
+
+    Avoids downloading the default ONNX model in tests. Texts sharing
+    words get similar vectors, so retrieval ordering is meaningful.
+    """
+
+    _DIM = 32
+
+    def __init__(self) -> None:
+        pass
+
+    def __call__(self, input: Documents) -> Embeddings:  # noqa: A002 - Chroma API
+        vectors: Embeddings = []
+        for text in input:
+            vec = np.zeros(self._DIM, dtype=np.float32)
+            for word in text.lower().split():
+                digest = hashlib.sha256(word.encode()).digest()
+                vec[digest[0] % self._DIM] += 1.0
+            vectors.append(vec)
+        return vectors
+
+    @staticmethod
+    def name() -> str:
+        return "asa-test-fake"
+
+    def get_config(self) -> dict:
+        return {}
+
+    @staticmethod
+    def build_from_config(_config: dict) -> FakeEmbeddingFunction:
+        return FakeEmbeddingFunction()
+
+    def default_space(self) -> Space:
+        return "cosine"
+
+    def supported_spaces(self) -> list[Space]:
+        return ["cosine", "l2", "ip"]
+
+
+@pytest.fixture
+def fake_embedding() -> FakeEmbeddingFunction:
+    return FakeEmbeddingFunction()
 
 
 @pytest.fixture
