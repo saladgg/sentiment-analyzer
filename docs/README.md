@@ -18,6 +18,7 @@ and extended.
 | [data-model.md](data-model.md)             | Pydantic schemas, internal record shape, persistence layout.                           |
 | [frontend.md](frontend.md)                 | Streamlit pages (Analyze, Run History, RAG Management) and how they call the backend. |
 | [development.md](development.md)           | Local setup, testing, linting, type checking, Docker, releases, CI.                    |
+| [todos/](todos/README.md)                  | Audit backlogs: findings plus execution checklists.                                    |
 
 ## Conventions used in these docs
 
