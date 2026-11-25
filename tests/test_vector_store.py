@@ -27,9 +27,11 @@ class TestVectorStore:
             namespace="ops",
             source="policy.txt",
         )
-        result = store.query("how long do refunds take", top_k=1, namespace="ops")
-        assert result["documents"][0] == ["refunds are processed within thirty days"]
-        assert result["metadatas"][0][0]["source"] == "policy.txt"
+        hits = store.query("how long do refunds take", top_k=1, namespace="ops")
+        assert [h.content for h in hits] == ["refunds are processed within thirty days"]
+        assert hits[0].source == "policy.txt"
+        assert hits[0].chunk_id == "doc-1:0"
+        assert hits[0].namespace == "ops"
 
     def test_add_empty_list_is_noop(self, store):
         assert store.add([]) == 0
@@ -37,8 +39,8 @@ class TestVectorStore:
     def test_namespace_filter(self, store):
         store.add(["alpha text here"], document_id="a", namespace="one")
         store.add(["alpha text here"], document_id="b", namespace="two")
-        result = store.query("alpha", top_k=5, namespace="two")
-        assert {m["document_id"] for m in result["metadatas"][0]} == {"b"}
+        hits = store.query("alpha", top_k=5, namespace="two")
+        assert {h.document_id for h in hits} == {"b"}
 
     def test_list_search_and_delete(self, store):
         store.add(["one", "two"], document_id="doc-a", namespace="n1", source="a.txt")

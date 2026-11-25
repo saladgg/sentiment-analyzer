@@ -8,6 +8,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 from api_client import (
+    APIError,
     delete_rag_document,
     list_rag_documents,
     rag_retrieve,
@@ -28,10 +29,14 @@ with col_file:
     doc_file = st.file_uploader(
         "Choose a text file",
         type=["txt", "md", "csv", "json"],
-        help="Plain-text documents work best. The file is chunked into 500-char segments.",
+        help="UTF-8 text. Split into overlapping chunks on paragraph and sentence boundaries.",
     )
 with col_ns:
-    namespace = st.text_input("Namespace", value="default")
+    namespace = st.text_input(
+        "Namespace",
+        value="default",
+        help="Letters, digits, '-' and '_'. A grouping label, not an access boundary.",
+    )
 
 if st.button("Upload", type="primary", disabled=doc_file is None):
     with st.spinner("Uploading and embedding..."):
@@ -41,7 +46,7 @@ if st.button("Upload", type="primary", disabled=doc_file is None):
                 f"Uploaded **{res['filename']}** — "
                 f"{res['chunks_added']} chunks stored (doc `{res['document_id'][:8]}...`)"
             )
-        except Exception as exc:
+        except APIError as exc:
             st.error(f"Upload failed: {exc}")
 
 # ── document list ───────────────────────────────────────────────────
@@ -53,7 +58,7 @@ if st.button("Refresh list"):
 
 try:
     docs = list_rag_documents()
-except Exception as exc:
+except APIError as exc:
     st.error(f"Could not load documents: {exc}")
     docs = []
 
@@ -61,7 +66,7 @@ if not docs:
     st.info("No documents in the vector store yet.")
 else:
     df = pd.DataFrame(docs)
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(df, width="stretch", hide_index=True)
 
     # delete action
     doc_ids = [d.get("document_id", d.get("id", "")) for d in docs]
@@ -72,7 +77,7 @@ else:
                 delete_rag_document(to_delete)
                 st.success(f"Deleted `{to_delete[:8]}...`")
                 st.rerun()
-            except Exception as exc:
+            except APIError as exc:
                 st.error(f"Delete failed: {exc}")
 
 # ── semantic search preview ─────────────────────────────────────────
@@ -91,7 +96,7 @@ if st.button("Search", disabled=not query.strip()):
     with st.spinner("Retrieving..."):
         try:
             results = rag_retrieve(query, top_k=top_k, namespace=search_ns)
-        except Exception as exc:
+        except APIError as exc:
             st.error(f"Retrieval failed: {exc}")
             results = []
 

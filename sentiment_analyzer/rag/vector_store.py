@@ -13,6 +13,7 @@ from typing import Any
 
 import chromadb
 from chromadb.config import Settings
+from sentiment_analyzer.rag.models import RAGChunk
 
 COLLECTION_NAME = "rag_context"
 
@@ -97,17 +98,59 @@ class VectorStore:
         *,
         top_k: int = 5,
         namespace: str | None = None,
-    ):
-        """
-        Retrieve similar documents from the vector store.
-        """
-        where: dict[str, str] | None = {"namespace": namespace} if namespace else None
+    ) -> list[RAGChunk]:
+        """Retrieve the chunks most similar to ``query``."""
+        return self.query_many([query], top_k=top_k, namespace=namespace)[0]
 
-        return self.collection.query(
-            query_texts=[query],
+    def query_many(
+        self,
+        queries: list[str],
+        *,
+        top_k: int = 5,
+        namespace: str | None = None,
+    ) -> list[list[RAGChunk]]:
+        """
+        Retrieve similar chunks for many queries in one call.
+
+        ``score`` is ``1 - distance``, so higher means more relevant.
+        """
+        if not queries:
+            return []
+        if self.collection.count() == 0:
+            return [[] for _ in queries]
+
+        where: dict[str, str] | None = {"namespace": namespace} if namespace else None
+        results = self.collection.query(
+            query_texts=queries,
             n_results=top_k,
             where=where,  # type: ignore[arg-type]
         )
+
+        documents = results.get("documents") or [[] for _ in queries]
+        metadatas = results.get("metadatas") or [[] for _ in queries]
+        distances = results.get("distances") or [[] for _ in queries]
+        ids = results.get("ids") or [[] for _ in queries]
+
+        hits: list[list[RAGChunk]] = []
+        for docs, metas, dists, chunk_ids in zip(documents, metadatas, distances, ids, strict=True):
+            hits.append(
+                [
+                    RAGChunk(
+                        content=doc,
+                        source=str(meta.get("source") or ""),
+                        score=1 - float(dist),
+                        document_id=str(meta.get("document_id") or ""),
+                        namespace=str(meta.get("namespace") or ""),
+                        chunk_id=str(chunk_id),
+                    )
+                    for doc, meta, dist, chunk_id in zip(docs, metas, dists, chunk_ids, strict=True)
+                ]
+            )
+        return hits
+
+    def heartbeat(self) -> int:
+        """Cheap liveness probe: number of stored chunks."""
+        return self.collection.count()
 
     # ------------------------------------------------------------------
     # MAINTENANCE

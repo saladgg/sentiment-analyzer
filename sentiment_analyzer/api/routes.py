@@ -1,101 +1,136 @@
 """
-HTTP routes exposed to frontend clients.
+Analysis endpoints: JSON / text bodies and CSV / Excel uploads.
+
+Routes are plain ``def`` so FastAPI runs the blocking pipeline in its
+threadpool instead of on the event loop.
 """
 
+import io
 from typing import Annotated
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 
-from sentiment_analyzer.api.schemas import AnalysisRequest, AnalysisResponse, EngineName
-from sentiment_analyzer.core.config import settings
-from sentiment_analyzer.core.logging import logger
+from sentiment_analyzer.api.deps import get_service, get_settings, read_upload, split_csv_param
+from sentiment_analyzer.api.schemas import (
+    AnalysisRequest,
+    AnalysisResponse,
+    EngineName,
+    Granularity,
+)
+from sentiment_analyzer.core.config import Settings
+from sentiment_analyzer.core.errors import UnsupportedInputError
 from sentiment_analyzer.ingestion.csv_adapter import CSVAdapter
 from sentiment_analyzer.ingestion.excel_adapter import ExcelAdapter
 from sentiment_analyzer.services.analysis_service import AnalysisService
-from sentiment_analyzer.storage.runs import RunStore
 
-router = APIRouter()
+router = APIRouter(tags=["Analysis"])
+
+ServiceDep = Annotated[AnalysisService, Depends(get_service)]
+SettingsDep = Annotated[Settings, Depends(get_settings)]
+TextFieldsParam = Annotated[
+    str | None,
+    Query(description="Comma-separated columns to analyze; auto-detected when omitted."),
+]
 
 
 @router.post("/analyze", response_model=AnalysisResponse)
-def analyze(request: AnalysisRequest):
+def analyze(request: AnalysisRequest, service: ServiceDep):
     """
-    Analyze JSON-based input data.
+    Analyze a JSON list of records, or plain text (``source_type: "text"``).
 
     This is the primary endpoint used by programmatic clients.
     """
-    try:
-        service = AnalysisService()
-        return service.run(
-            data=request.data,
-            source_type=request.source_type,
-            sentiment_engine=request.sentiment_engine,
-        )
-    except Exception as e:
-        logger.error("default_analysis_failed", error=str(e))
-        raise
+    return service.run(
+        data=request.data,
+        source_type=request.source_type,
+        sentiment_engine=request.sentiment_engine,
+        text_fields=request.text_fields,
+        use_rag=request.use_rag,
+        timestamp_field=request.timestamp_field,
+        granularity=request.granularity,
+    )
+
+
+def _analyze_upload(
+    *,
+    file: UploadFile,
+    extension: str,
+    source_type: str,
+    service: AnalysisService,
+    settings: Settings,
+    sentiment_engine: EngineName | None,
+    text_fields: str | None,
+    use_rag: bool | None,
+    timestamp_field: str | None,
+    granularity: Granularity,
+):
+    if not file.filename or not file.filename.lower().endswith(extension):
+        raise UnsupportedInputError(f"Only {extension} files are supported")
+
+    payload = io.BytesIO(read_upload(file, settings.max_upload_bytes))
+    adapter = (
+        CSVAdapter(max_records=settings.max_records)
+        if source_type == "csv"
+        else ExcelAdapter(max_records=settings.max_records)
+    )
+    return service.run(
+        data=adapter.load(payload),
+        source_type=source_type,
+        sentiment_engine=sentiment_engine,
+        text_fields=split_csv_param(text_fields),
+        use_rag=use_rag,
+        timestamp_field=timestamp_field,
+        granularity=granularity,
+    )
 
 
 @router.post("/analyze/csv", response_model=AnalysisResponse)
-async def analyze_csv(
+def analyze_csv(
     file: Annotated[UploadFile, File(...)],
+    service: ServiceDep,
+    settings: SettingsDep,
     sentiment_engine: EngineName | None = None,
+    text_fields: TextFieldsParam = None,
+    use_rag: bool | None = None,
+    timestamp_field: str | None = None,
+    granularity: Granularity = "day",
 ):
-    """
-    Analyze sentiment from a CSV file upload.
-    """
-    try:
-        if not file.filename or not file.filename.endswith(".csv"):
-            raise HTTPException(status_code=400, detail="Only CSV files are supported")
-
-        adapter = CSVAdapter()
-        records = adapter.load(file.file)
-
-        service = AnalysisService()
-        return service.run(
-            data=records,
-            source_type="csv",
-            sentiment_engine=sentiment_engine,
-        )
-    except Exception as e:
-        logger.error("csv_analysis_failed", error=str(e))
-        raise
+    """Analyze sentiment from a UTF-8 CSV file upload."""
+    return _analyze_upload(
+        file=file,
+        extension=".csv",
+        source_type="csv",
+        service=service,
+        settings=settings,
+        sentiment_engine=sentiment_engine,
+        text_fields=text_fields,
+        use_rag=use_rag,
+        timestamp_field=timestamp_field,
+        granularity=granularity,
+    )
 
 
 @router.post("/analyze/excel", response_model=AnalysisResponse)
-async def analyze_excel(
+def analyze_excel(
     file: Annotated[UploadFile, File(...)],
+    service: ServiceDep,
+    settings: SettingsDep,
     sentiment_engine: EngineName | None = None,
+    text_fields: TextFieldsParam = None,
+    use_rag: bool | None = None,
+    timestamp_field: str | None = None,
+    granularity: Granularity = "day",
 ):
-    """
-    Analyze sentiment from an Excel (.xlsx) file upload.
-    """
-    try:
-        if not file.filename or not file.filename.endswith(".xlsx"):
-            raise HTTPException(status_code=400, detail="Only .xlsx files are supported")
-
-        adapter = ExcelAdapter()
-        records = adapter.load(file.file)
-
-        service = AnalysisService()
-        return service.run(
-            data=records,
-            source_type="excel",
-            sentiment_engine=sentiment_engine,
-        )
-    except Exception as e:
-        logger.error("excel_analysis_failed", error=str(e))
-        raise
-
-
-@router.get("/runs")
-def list_runs():
-    """
-    List past analysis runs.
-    """
-    try:
-        store = RunStore(settings.rag_db_path)
-        return store._load_all_runs()
-    except Exception as e:
-        logger.error("runs_store_failed", error=str(e))
-        raise
+    """Analyze sentiment from an Excel (.xlsx) file upload (first sheet)."""
+    return _analyze_upload(
+        file=file,
+        extension=".xlsx",
+        source_type="excel",
+        service=service,
+        settings=settings,
+        sentiment_engine=sentiment_engine,
+        text_fields=text_fields,
+        use_rag=use_rag,
+        timestamp_field=timestamp_field,
+        granularity=granularity,
+    )
