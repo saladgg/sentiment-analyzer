@@ -13,11 +13,13 @@ match that file.
 > rate limiting (FEAT-8), a `/metrics` endpoint (OPS-4), LLM token/cost
 > reporting (FEAT-10), and an API-key write scope (SEC-1, optional).
 >
-> **Verified only in CI, not locally:** the `make audit` (pip-audit) step
-> and the GHCR publish job. The `api` image was built and booted locally.
+> **Not yet exercised:** the GHCR publish job (it runs on the first
+> release). The `api` and `frontend` images were built and booted locally.
 >
-> **New finding during implementation:** SEC-9 (litellm loading `.env` into
-> `os.environ`), fixed.
+> **New findings during implementation:** SEC-9 (litellm loading `.env`
+> into `os.environ`), fixed. SEC-10 (263 vulnerable locked dependencies,
+> found by the first CI audit run), fixed by upgrading the lock; 4
+> unfixable Chroma-server CVEs are accepted with a reason.
 
 Effort key: **S** ≤ 0.5d · **M** ≤ 2d · **L** > 2d.
 
@@ -172,6 +174,10 @@ Effort key: **S** ≤ 0.5d · **M** ≤ 2d · **L** > 2d.
   v10; the debug step is removed. *Not yet exercised in CI.*
 - [x] **OPS-7 / SEC-6 — Dependency automation.** Dependabot (uv, actions,
   docker), a `make audit` CI job, actions pinned by SHA.
+- [x] **SEC-10 (new) — 263 vulnerable locked dependencies.** Found by the
+  first CI audit run. `uv lock --upgrade` leaves 4 chromadb
+  Chroma-server-only CVEs with no fix; they are accepted with a reason in
+  `AUDIT_IGNORES`. `torch` (`+cpu`) is now audited under its PyPI version.
 - [x] **SEC-7 — Error surfaces.** The UI shows the API `detail` and
   request ID.
 - [x] **SEC-8 — Namespace semantics documented.**

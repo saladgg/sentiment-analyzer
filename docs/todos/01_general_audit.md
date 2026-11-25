@@ -86,9 +86,7 @@ None of these are hard to fix. Tier 0 in the todos file is all **S/M** work.
 `sentiment_analyzer/rag/vector_store.py:18-26`
 
 ```python
-self.client = Client(
-    Settings(persist_directory=path, anonymized_telemetry=False)
-)
+self.client = Client(Settings(persist_directory=path, anonymized_telemetry=False))
 ```
 
 In chromadb 1.x (`uv.lock`: 1.5.5), `chromadb.Client(...)` is the
@@ -395,6 +393,33 @@ had imported litellm. **Fix:** set
 `os.environ.setdefault("LITELLM_MODE", "PRODUCTION")` before the import
 (`sentiment/llm.py`) and in the Docker image. Settings already read `.env`
 themselves.
+
+### SEC-10 🟠 263 known vulnerabilities in the locked dependencies · ✅ Verified · **S**
+
+*Found by the new CI `audit` job on the first push (2026-11-25).* pip-audit
+reported 263 advisories across 21 packages, including aiohttp, pillow,
+gitpython, litellm, starlette, python-multipart, tornado, urllib3 and
+transformers. The lockfile was about 7 months old. **Fix:** `uv lock
+--upgrade`, which brought it down to 8 advisories (4 CVEs), all in
+`chromadb` 1.5.9, the latest release, with no fix available:
+
+| CVE | Advisory | Affects |
+| --- | --- | --- |
+| CVE-2026-45829 | GHSA-f4j7-r4q5-qw2c | Chroma server `/api/v2/.../collections`: pre-auth code injection via `trust_remote_code` |
+| CVE-2026-45833 | GHSA-36p7-vc44-83pf | Chroma server collection update: authenticated code injection |
+| CVE-2026-45830 | GHSA-2wm9-hf6c-p5cr | Chroma server multi-tenant authorization |
+| CVE-2026-45831 | GHSA-xph7-9rjv-w5fr | Chroma server `SimpleRBACAuthorizationProvider` |
+
+**Accepted, not exploitable here.** All four are in Chroma's HTTP server.
+This app embeds Chroma in-process (`PersistentClient`), never starts or
+exposes a Chroma server, and does not let API clients set collection or
+embedding-function configuration. They are listed in `AUDIT_IGNORES` in the
+`Makefile`. **Re-check trigger:** any chromadb upgrade, or any change that
+runs Chroma as a separate server.
+
+The audit also skipped `torch==2.15.0+cpu`, because local `+cpu` builds
+aren't on PyPI. `make audit` now checks the matching upstream release
+instead.
 
 ---
 

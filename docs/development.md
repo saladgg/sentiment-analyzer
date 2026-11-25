@@ -204,7 +204,11 @@ workflow. Actions are pinned to commit SHAs. Jobs:
 1. **Lint & Test** — `make install-dev` (fails on a stale lockfile),
    `make format-check`, `make lint`, `make test` (coverage gate).
 2. **Dependency audit** — `make audit` (`pip-audit` over the locked runtime
-   dependencies).
+   dependencies). `torch`'s local `+cpu` build is checked under its upstream
+   PyPI version. Accepted advisories are listed in `AUDIT_IGNORES` in the
+   `Makefile`, each with a reason and a re-check trigger. Add to that list
+   only after confirming the advisory can't be reached in this app; upgrade
+   instead whenever a fix exists (`make update`).
 3. **Docker build & smoke test** — builds the `api` target, starts it, waits
    for `/healthz`, then checks `/readyz` and a `POST /api/v1/analyze` with
    plain text.

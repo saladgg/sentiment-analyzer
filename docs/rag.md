@@ -77,7 +77,7 @@ this. A document with no text after chunking is rejected with `422`.
 ## Retrieval
 
 ```python
-store.query("refund delays", top_k=5, namespace="default")        # -> list[RAGChunk]
+store.query("refund delays", top_k=5, namespace="default")  # -> list[RAGChunk]
 store.query_many(["text 1", "text 2"], top_k=5, namespace="default")  # -> list[list[RAGChunk]]
 ```
 
@@ -96,12 +96,13 @@ class RAGChunk:
     namespace: str = ""
     chunk_id: str = ""
 
+
 @dataclass
 class RAGResult:
     chunks: list[RAGChunk]
     # properties:
-    context: str          # "\n".join(chunk.content)
-    sources: list[str]    # sorted unique non-empty sources
+    context: str  # "\n".join(chunk.content)
+    sources: list[str]  # sorted unique non-empty sources
     chunk_ids: list[str]
 ```
 

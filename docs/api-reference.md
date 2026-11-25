@@ -476,9 +476,9 @@ Response — `ABTestResponse`:
 
 ```python
 class ABTestResponse(BaseModel):
-    base: AnalysisResponse        # run without RAG
-    rag: AnalysisResponse         # run with RAG
-    comparison: RunComparison     # base_run_id = base.run_id, rag_run_id = rag.run_id
+    base: AnalysisResponse  # run without RAG
+    rag: AnalysisResponse  # run with RAG
+    comparison: RunComparison  # base_run_id = base.run_id, rag_run_id = rag.run_id
 ```
 
 Both runs are persisted and appear in `GET /runs`.

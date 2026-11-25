@@ -151,7 +151,7 @@ precedence over relative paths in `.env`. See
 from sentiment_analyzer.core.config import get_settings
 
 settings = get_settings()
-settings.rag_top_k                 # 5
+settings.rag_top_k  # 5
 settings.default_sentiment_engine  # "rule_based"
 ```
 

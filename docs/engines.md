@@ -15,17 +15,17 @@ All engines extend `SentimentEngine` from
 @dataclass(frozen=True)
 class SentimentResult:
     label: Literal["positive", "neutral", "negative"]
-    polarity: float       # signed sentiment, clamped to [-1, 1]; 0 = neutral
-    confidence: float     # how sure the engine is of `label`, clamped to [0, 1]
-    drivers: dict[str, float] = {}   # engine-specific explanatory signals
+    polarity: float  # signed sentiment, clamped to [-1, 1]; 0 = neutral
+    confidence: float  # how sure the engine is of `label`, clamped to [0, 1]
+    drivers: dict[str, float] = {}  # engine-specific explanatory signals
 
 
 class SentimentEngine(ABC):
-    name: ClassVar[str]           # registry key, e.g. "rule_based"
-    display_name: ClassVar[str]   # for UIs
-    description: ClassVar[str]    # for UIs
-    uses_context: ClassVar[bool] = False   # reads RAG context?
-    is_paid: ClassVar[bool] = False        # each call costs money?
+    name: ClassVar[str]  # registry key, e.g. "rule_based"
+    display_name: ClassVar[str]  # for UIs
+    description: ClassVar[str]  # for UIs
+    uses_context: ClassVar[bool] = False  # reads RAG context?
+    is_paid: ClassVar[bool] = False  # each call costs money?
 
     @abstractmethod
     def analyze(self, text: str, context: str | None = None) -> SentimentResult: ...

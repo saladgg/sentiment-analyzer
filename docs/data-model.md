@@ -10,8 +10,9 @@ Shared types:
 
 ```python
 SentimentLabel = Literal["positive", "neutral", "negative"]
-SourceType     = Literal["json", "csv", "excel", "text"]
-Granularity    = Literal["day", "week", "month", "year"]
+SourceType = Literal["json", "csv", "excel", "text"]
+Granularity = Literal["day", "week", "month", "year"]
+
 
 class EngineName(StrEnum):
     RULE_BASED = "rule_based"
@@ -25,9 +26,9 @@ class EngineName(StrEnum):
 class AnalysisRequest(BaseModel):
     data: list[dict[str, Any]] | str
     source_type: SourceType
-    sentiment_engine: EngineName | None = None       # ASA_DEFAULT_SENTIMENT_ENGINE
-    text_fields: list[str] | None = None             # min 1 item when given
-    use_rag: bool | None = None                      # ASA_RAG_ENABLED
+    sentiment_engine: EngineName | None = None  # ASA_DEFAULT_SENTIMENT_ENGINE
+    text_fields: list[str] | None = None  # min 1 item when given
+    use_rag: bool | None = None  # ASA_RAG_ENABLED
     timestamp_field: str | None = None
     granularity: Granularity = "day"
 ```
@@ -44,11 +45,12 @@ class RecordRAG(BaseModel):
     sources: list[str] = []
     chunks_used: int = 0
 
+
 class RecordSentiment(BaseModel):
     record_id: int
     sentiment: SentimentLabel | None
-    score: float | None                      # polarity in [-1, 1], rounded to 4 dp
-    confidence: float | None = None          # in [0, 1], rounded to 4 dp
+    score: float | None  # polarity in [-1, 1], rounded to 4 dp
+    confidence: float | None = None  # in [0, 1], rounded to 4 dp
     contributing_fields: dict[str, float] = {}
     drivers: dict[str, float] = {}
     rag: RecordRAG | None = None
@@ -75,9 +77,9 @@ class RecordSentiment(BaseModel):
 
 ```python
 class Summary(BaseModel):
-    total_records: int                    # successfully analyzed records
+    total_records: int  # successfully analyzed records
     failed_records: int = 0
-    distribution: dict[str, int]          # label -> count, successful records only
+    distribution: dict[str, int]  # label -> count, successful records only
     dominant_sentiment: SentimentLabel | None
     avg_score: float | None = None
     avg_confidence: float | None = None
@@ -92,8 +94,8 @@ positive > neutral > negative. `dominant_sentiment` and the averages are
 
 ```python
 class RAGMetadata(BaseModel):
-    enabled: bool          # RAG was active: requested and the engine uses context
-    used: bool             # at least one record received at least one chunk
+    enabled: bool  # RAG was active: requested and the engine uses context
+    used: bool  # at least one record received at least one chunk
     source_count: int = 0  # distinct sources across all records
 ```
 
@@ -104,15 +106,16 @@ Present only when `ASA_RAG_ENABLED=true`; otherwise `AnalysisResponse.rag` is
 
 ```python
 class TrendBucket(BaseModel):
-    bucket: str                   # "2026-01-05", "2026-W02", "2026-01" or "2026"
+    bucket: str  # "2026-01-05", "2026-W02", "2026-01" or "2026"
     count: int
     avg_score: float
     distribution: dict[str, int]
 
+
 class Trend(BaseModel):
     granularity: Granularity
-    buckets: list[TrendBucket]    # sorted by bucket
-    unparseable: int              # records whose timestamp could not be parsed
+    buckets: list[TrendBucket]  # sorted by bucket
+    unparseable: int  # records whose timestamp could not be parsed
 ```
 
 Built by
@@ -125,14 +128,14 @@ counted as unparseable.
 
 ```python
 class AnalysisResponse(BaseModel):
-    run_id: str                   # UUID
+    run_id: str  # UUID
     engine: str
-    input_sha256: str             # fingerprint of the input records
-    text_fields: list[str]        # fields that were analyzed
+    input_sha256: str  # fingerprint of the input records
+    text_fields: list[str]  # fields that were analyzed
     summary: Summary
     records: list[RecordSentiment]
-    anomalies: list[Anomaly]      # RecordSentiment + z_score
-    explanations: list[str]       # one per record, same order as `records`
+    anomalies: list[Anomaly]  # RecordSentiment + z_score
+    explanations: list[str]  # one per record, same order as `records`
     rag: RAGMetadata | None = None
     trend: Trend | None = None
 ```
@@ -175,8 +178,8 @@ Every engine returns a `SentimentResult` from
 @dataclass(frozen=True)
 class SentimentResult:
     label: Literal["positive", "neutral", "negative"]
-    polarity: float           # clamped to [-1, 1]
-    confidence: float         # clamped to [0, 1]
+    polarity: float  # clamped to [-1, 1]
+    confidence: float  # clamped to [0, 1]
     drivers: dict[str, float] = {}
 ```
 
@@ -193,17 +196,18 @@ Defined in [`rag/models.py`](../sentiment_analyzer/rag/models.py):
 class RAGChunk:
     content: str
     source: str
-    score: float           # 1 - distance; higher = more similar
+    score: float  # 1 - distance; higher = more similar
     document_id: str = ""
     namespace: str = ""
-    chunk_id: str = ""     # "{document_id}:{chunk_index}"
+    chunk_id: str = ""  # "{document_id}:{chunk_index}"
+
 
 @dataclass
 class RAGResult:
     chunks: list[RAGChunk] = []
     # properties
-    context: str           # "\n".join(c.content for c in chunks)
-    sources: list[str]     # sorted unique non-empty sources
+    context: str  # "\n".join(c.content for c in chunks)
+    sources: list[str]  # sorted unique non-empty sources
     chunk_ids: list[str]
 ```
 
@@ -216,8 +220,8 @@ id `{document_id}:{chunk_index}` and the metadata:
 ```python
 {
     "document_id": str,
-    "namespace":   str,   # "" if none was given
-    "source":      str,   # filename or label; "" if none
+    "namespace": str,  # "" if none was given
+    "source": str,  # filename or label; "" if none
     "chunk_index": int,
 }
 ```
