@@ -34,8 +34,10 @@ jobs:
         with:
           python-version: "3.14"
 
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+
       - name: Install release tooling
-        run: pip install "python-semantic-release==10.*" build
+        run: pip install "python-semantic-release==10.*"
 
       - name: Semantic Release
         id: release
@@ -45,6 +47,8 @@ jobs:
           before=$(git describe --tags --abbrev=0 2>/dev/null || echo none)
           semantic-release version
           semantic-release publish
+          # Guard: the tagged tree must have a lock that matches pyproject.
+          uv lock --check
           after=$(git describe --tags --abbrev=0 2>/dev/null || echo none)
           if [ "$before" != "$after" ]; then
             echo "released=true" >> "$GITHUB_OUTPUT"
