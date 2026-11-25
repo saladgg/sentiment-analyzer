@@ -8,383 +8,145 @@
 ![ChromaDB](https://img.shields.io/badge/ChromaDB-RAG-purple)
 ![DuckDB](https://img.shields.io/badge/DuckDB-Persistence-blue)
 ![Docker](https://img.shields.io/badge/Docker-Containerized-blue)
-[![Coverage Status](https://coveralls.io/repos/github/saladgg/sentiment-analyzer/badge.svg)](https://coveralls.io/github/saladgg/sentiment-analyzer)
 ![License](https://img.shields.io/badge/License-MIT-brightgreen)
 
-**SentimentAnalyzer** is an input-agnostic, explainable sentiment analysis platform designed for structured and semi-structured datasets.
+**SentimentAnalyzer** is an input-agnostic, explainable sentiment analysis
+service for structured and semi-structured data. Send it JSON records, plain
+text, CSV or Excel; it finds the free-text fields, scores every record with
+the engine you choose, and returns per-record results with explanations, a
+dataset summary, anomalies and an optional trend over time. Every run is
+stored so it can be inspected, exported and compared later.
 
-Unlike traditional sentiment APIs that return raw labels, this system focuses on:
+## Features
 
-- Transparency
-- Aggregation
-- Evaluation
-- Deterministic re-runs
+- Input: JSON records, plain text (one record per line), CSV and Excel
+  uploads.
+- Automatic text-field detection, or explicit `text_fields`.
+- Three engines behind one contract (label, polarity, confidence, drivers):
+  - `rule_based` — deterministic lexicon with negation handling.
+  - `hf_transformer` — local HuggingFace model (optional `ml` extra).
+  - `llm` — any provider supported by [litellm](https://docs.litellm.ai/)
+    (OpenAI, Anthropic, Ollama, Groq, ...), with prompt-injection hardening
+    and validated JSON output.
+- Per-record results with per-field contributions, failures reported per
+  record instead of failing the run.
+- Dataset summary, z-score anomalies, explanations, and sentiment trends by
+  day/week/month/year.
+- Optional RAG context from a persistent Chroma store, with an A/B endpoint to
+  measure its effect.
+- Run history in DuckDB: input fingerprint, config snapshot, CSV/JSON export,
+  record-level run comparison.
+- Evaluation endpoints: accuracy, per-class precision/recall/F1, macro-F1 and
+  confusion matrix, for given predictions or for an engine on labelled texts.
+- API-key auth, input limits, JSON errors with request IDs, JSON logs,
+  `/healthz` and `/readyz`.
+- Streamlit UI for analysis, run history and RAG management.
 
-It is built as a production-oriented platform suitable for batch analysis, experimentation, and interactive exploration via its Streamlit frontend.
+## Quick start
 
----
-
-## Key Features
-
-- Input-agnostic ingestion (JSON, CSV, Excel)
-- Automatic detection of text-bearing fields
-- Pluggable sentiment engines:
-  - Rule-based
-  - Transformer-based (HuggingFace)
-  - LLM-backed (any provider via [litellm](https://docs.litellm.ai/) — OpenAI, Anthropic, Ollama, Groq, etc.)
-- Explainable per-record sentiment outputs
-- Dataset-level aggregation and summaries
-- Optional RAG-based sentiment context enrichment
-- Offline evaluation harness (accuracy, drift-ready)
-- Deterministic, auditable runs
-- Streamlit frontend with interactive analysis, run history, and RAG management
-
----
-
-## Getting Started
-
-### Prerequisites
-
-- Python 3.13+
-- [uv](https://docs.astral.sh/uv/) (recommended) or pip
-
-### Installation
+Prerequisites: Python 3.13+ (the repo pins 3.14 in `.python-version`) and
+[uv](https://docs.astral.sh/uv/).
 
 ```bash
-# Clone the repository
 git clone https://github.com/saladgg/sentiment-analyzer.git
 cd sentiment-analyzer
-
-# Install dependencies
-uv sync
+make install-dev        # all extras (ml, frontend) + dev tools
+cp .env.example .env    # adjust as needed
+make run                # API on http://localhost:8000
+make frontend           # UI on http://localhost:8501 (separate terminal)
 ```
 
-### Configuration
-
-Copy the example environment file and adjust values as needed:
+Try it:
 
 ```bash
-cp .env.example .env
+curl -s -X POST http://localhost:8000/api/v1/analyze \
+  -H 'Content-Type: application/json' \
+  -d '{"source_type": "text", "data": "Great service!\nThe delivery was late."}'
 ```
 
-### Running the Server
+With the default `ASA_ENVIRONMENT=dev` and no `ASA_API_KEYS`, the API is
+open. Outside `dev` it requires keys and every request must send
+`X-API-Key`; set `ASA_API_KEY` for the frontend to match.
 
-```bash
-make run
-```
+Interactive API docs (disabled in `prod`): `http://localhost:8000/docs`.
 
-The API will be available at `http://localhost:8000`.
-
-### Running the Frontend
-
-```bash
-make frontend
-```
-
-The Streamlit UI will be available at `http://localhost:8501`.
-
-The frontend provides three pages:
-
-- **Analyze** — Upload CSV/Excel or paste JSON, pick a sentiment engine, and view interactive results with charts, per-record scores, anomalies, and explanations.
-- **Run History** — Browse past analysis runs and compare two runs side-by-side (e.g. base vs. RAG-enriched).
-- **RAG Management** — Upload context documents, manage the vector store, and preview semantic retrieval results.
-
-### Running Tests
-
-```bash
-make test
-```
-
-### Code Quality
-
-```bash
-make lint          # ruff + mypy
-make format        # auto-format
-make fix           # auto-fix lint issues
-```
+To use the LLM engine, set `ASA_LLM_MODEL` (and `ASA_LLM_API_KEY` if your
+provider needs one). To seed the RAG store with starter documents, run
+`make rag-bootstrap` while the API is stopped.
 
 ### Docker
 
 ```bash
-make docker-up     # build and start
-make docker-down   # stop
-make docker-logs   # tail logs
+make docker-up     # API on :8000, UI on :8501; data on the run-data volume
+make docker-logs
+make docker-down
 ```
 
-Run `make help` to see all available targets.
+### Tests and checks
 
----
-
-## API Documentation
-
-FastAPI provides built-in interactive API documentation:
-
-| Docs UI    | URL                              |
-| ---------- | -------------------------------- |
-| Swagger UI | `http://localhost:8000/docs`     |
-| ReDoc      | `http://localhost:8000/redoc`    |
-| OpenAPI    | `http://localhost:8000/openapi.json` |
-
-All application endpoints are mounted under the `/api` prefix.
-
----
-
-### Analysis Endpoints
-
-#### `POST /api/analyze`
-
-Run sentiment analysis on JSON or text data.
-
-**Request body:**
-
-```json
-{
-  "data": [
-    {"comment": "I love this product, it works great"},
-    {"comment": "Terrible experience, very disappointing"}
-  ],
-  "source_type": "json",
-  "sentiment_engine": "rule_based"
-}
+```bash
+make test          # pytest, fails under 90% coverage
+make lint          # ruff + mypy
+make format        # ruff format
+make audit         # pip-audit on locked dependencies
 ```
 
-| Field              | Type     | Default        | Description                                      |
-| ------------------ | -------- | -------------- | ------------------------------------------------ |
-| `data`             | any      | required       | List of dicts (JSON rows) or a plain text string |
-| `source_type`      | string   | required       | One of `json`, `csv`, `excel`, `text`            |
-| `sentiment_engine` | string   | `"rule_based"` | One of `rule_based`, `hf_transformer`, `llm`     |
+Run `make help` for all targets.
 
-**Response:**
+## API at a glance
 
-```json
-{
-  "run_id": "abc123",
-  "summary": { ... },
-  "records": [
-    {
-      "record_id": 0,
-      "sentiment": "positive",
-      "score": 0.85,
-      "contributing_fields": {"lexical_rules": 1.0, "positive_hits": 1, "negative_hits": 0}
-    }
-  ],
-  "anomalies": [],
-  "explanations": [],
-  "rag": null
-}
-```
+All routes are under `/api/v1` (the old `/api` prefix still works but is
+deprecated).
 
----
+| Endpoint                                  | Purpose                                         |
+| ----------------------------------------- | ----------------------------------------------- |
+| `POST /analyze`                           | Analyze JSON records or plain text.             |
+| `POST /analyze/csv`, `/analyze/excel`     | Analyze an uploaded file.                       |
+| `GET /engines`                            | Engines, their status, and input limits.        |
+| `GET /runs`, `GET /runs/{id}`             | Run history and run detail.                     |
+| `GET /runs/{id}/export`                   | Download a run as CSV or JSON.                  |
+| `GET /runs/compare`                       | Compare two runs of the same input.             |
+| `POST /runs/ab`                           | Run the same input without and with RAG.        |
+| `POST /evaluation/sentiment`, `/evaluation/engine` | Classification metrics.                |
+| `/rag/documents`, `POST /rag/retrieve`    | Manage and query RAG context documents.         |
+| `GET /healthz`, `GET /readyz`             | Liveness and readiness (no auth, no prefix).    |
 
-#### `POST /api/analyze/csv`
-
-Upload a CSV file for sentiment analysis.
-
-| Query Param        | Type   | Default        | Description            |
-| ------------------ | ------ | -------------- | ---------------------- |
-| `sentiment_engine` | string | `"rule_based"` | Sentiment engine to use |
-
-**Request:** `multipart/form-data` with a `file` field containing a `.csv` file.
-
-**Response:** Same as `POST /api/analyze`.
-
----
-
-#### `POST /api/analyze/excel`
-
-Upload an Excel file for sentiment analysis.
-
-| Query Param        | Type   | Default        | Description            |
-| ------------------ | ------ | -------------- | ---------------------- |
-| `sentiment_engine` | string | `"rule_based"` | Sentiment engine to use |
-
-**Request:** `multipart/form-data` with a `file` field containing a `.xlsx` file.
-
-**Response:** Same as `POST /api/analyze`.
-
----
-
-#### `GET /api/runs`
-
-List all past analysis runs.
-
-**Response:** Array of run objects.
-
----
-
-### Run Comparison Endpoints
-
-#### `GET /api/runs/compare`
-
-Compare two analysis runs (typically a base run vs. a RAG-enriched run).
-
-| Query Param  | Type   | Required | Description                |
-| ------------ | ------ | -------- | -------------------------- |
-| `base_run_id`| string | yes      | ID of the base run         |
-| `rag_run_id` | string | yes      | ID of the RAG-enriched run |
-
-**Response:**
-
-```json
-{
-  "base_run_id": "abc123",
-  "rag_run_id": "def456",
-  "comparison": { ... }
-}
-```
-
----
-
-### Evaluation Endpoints
-
-#### `POST /api/evaluation/sentiment`
-
-Evaluate sentiment predictions against ground-truth labels.
-
-| Query Param   | Type       | Required | Description               |
-| ------------- | ---------- | -------- | ------------------------- |
-| `predictions` | list[str]  | yes      | Predicted sentiment labels |
-| `labels`      | list[str]  | yes      | Ground-truth labels        |
-
-**Response:**
-
-```json
-{
-  "metric": "accuracy",
-  "value": 0.667,
-  "total_samples": 3
-}
-```
-
----
-
-### RAG Endpoints
-
-#### `POST /api/rag/documents`
-
-Upload a document to the RAG vector store.
-
-| Query Param | Type   | Default     | Description              |
-| ----------- | ------ | ----------- | ------------------------ |
-| `namespace` | string | `"default"` | Namespace for the document |
-
-**Request:** `multipart/form-data` with a `file` field containing a text file.
-
-**Response:**
-
-```json
-{
-  "document_id": "doc_abc123",
-  "filename": "context.txt",
-  "namespace": "default",
-  "chunks_added": 5
-}
-```
-
----
-
-#### `GET /api/rag/documents`
-
-List all uploaded RAG documents.
-
-**Response:** Array of document objects.
-
----
-
-#### `DELETE /api/rag/documents/{document_id}`
-
-Delete a document from the RAG store.
-
-**Response:**
-
-```json
-{
-  "status": "deleted",
-  "document_id": "doc_abc123"
-}
-```
-
----
-
-#### `POST /api/rag/retrieve`
-
-Retrieve relevant context chunks via semantic search.
-
-**Request body:**
-
-```json
-{
-  "query": "product quality issues",
-  "top_k": 5,
-  "namespace": "default"
-}
-```
-
-| Field       | Type   | Default     | Description                     |
-| ----------- | ------ | ----------- | ------------------------------- |
-| `query`     | string | required    | Search query                    |
-| `top_k`     | int    | optional    | Number of results to return     |
-| `namespace` | string | optional    | Namespace to search within      |
-
-**Response:**
-
-```json
-[
-  {
-    "content": "chunk text...",
-    "source": "context.txt",
-    "document_id": "doc_abc123",
-    "namespace": "default",
-    "score": 0.92
-  }
-]
-```
-
----
-
-## CI
-
-GitHub Actions runs lint, type checking, and tests on every push to `main` and on pull requests. See [.github/workflows/ci.yml](.github/workflows/ci.yml).
-
----
+See the [API reference](docs/api-reference.md) for schemas, examples and
+error codes.
 
 ## Documentation
 
-Detailed reference docs live in [docs/](docs/README.md):
+Detailed docs live in [docs/](docs/README.md):
 
-| Doc | Topic |
-| --- | --- |
-| [Architecture](docs/architecture.md) | System layers, request lifecycle, module responsibilities |
-| [Configuration](docs/configuration.md) | All `ASA_*` environment variables and the `.env` workflow |
-| [Engines](docs/engines.md) | Rule-based, HuggingFace transformer, and LLM engines — and how to add your own |
-| [RAG](docs/rag.md) | Vector store, enrichment pipeline, run comparison |
-| [API reference](docs/api-reference.md) | Full HTTP API with schemas and `curl` examples |
-| [Data model](docs/data-model.md) | Pydantic schemas, internal record shape, persistence layout |
-| [Frontend](docs/frontend.md) | Streamlit pages and how they call the backend |
-| [Development](docs/development.md) | Local setup, testing, lint, Docker, releases, CI |
+| Doc                                     | Topic                                                         |
+| --------------------------------------- | ------------------------------------------------------------- |
+| [Architecture](docs/architecture.md)    | App wiring, request lifecycle, module responsibilities        |
+| [Configuration](docs/configuration.md)  | All `ASA_*` settings and defaults                             |
+| [Engines](docs/engines.md)              | Engine contract, the three engines, adding your own           |
+| [RAG](docs/rag.md)                      | Vector store, chunking, enrichment, measuring RAG impact      |
+| [API reference](docs/api-reference.md)  | HTTP API with schemas and `curl` examples                     |
+| [Data model](docs/data-model.md)        | Schemas, persistence layout and migrations                    |
+| [Frontend](docs/frontend.md)            | Streamlit pages and how they call the backend                 |
+| [Development](docs/development.md)      | Setup, testing, lint, Docker, CI, releases                    |
 
----
-
-## Project Structure
+## Project structure
 
 ```
 sentiment_analyzer/
-  api/              # FastAPI route handlers and schemas
-  analytics/        # Aggregation, anomaly detection, explainability
-  core/             # Configuration and logging
-  evaluation/       # Evaluation harness (accuracy metrics)
+  main.py           # App factory (create_app) and lifespan
+  api/              # Routes, dependencies, Pydantic schemas
+  analytics/        # Aggregation, anomalies, explanations, trends, run comparison
+  core/             # Settings, auth, middleware, errors, logging
+  evaluation/       # Classification metrics
   ingestion/        # Input adapters (CSV, Excel, JSON, text)
   processing/       # Field detection, normalization, validation
-  rag/              # RAG vector store and context enrichment
-  scripts/          # Utility scripts (e.g., bootstrap RAG store)
-  sentiment/        # Sentiment engines (rule-based, transformer, LLM)
-  services/         # Orchestration and workflow logic
-  storage/          # Run persistence
+  rag/              # Vector store, chunking, context enrichment
+  scripts/          # bootstrap_rag_store
+  sentiment/        # Engines and engine registry
+  services/         # AnalysisService (pipeline orchestration)
+  storage/          # DuckDB run store and migrations
+frontend/           # Streamlit UI (app.py, api_client.py, pages/)
 tests/              # Test suite
 assets/             # Sample data files
-frontend/
-  app.py            # Streamlit entry point
-  api_client.py     # HTTP client for the FastAPI backend
-  theme.py          # Shared constants (colors, engine labels)
-  pages/            # Streamlit pages (analyze, history, rag)
+docs/               # Reference documentation
 ```

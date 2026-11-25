@@ -7,7 +7,7 @@ stamp at the top. Within a backlog, ship in tier order.
 
 | Pair | Topic | Status stamp lives in |
 | ---- | ----- | --------------------- |
-| 01 | General audit (security, hardening, architecture, correctness, quality, performance, ops, testing, missing capabilities) | [`01_general_audit_todos.md`](01_general_audit_todos.md): **filed 2026-11-25, nothing shipped** |
+| 01 | General audit (security, hardening, architecture, correctness, quality, performance, ops, testing, missing capabilities) | [`01_general_audit_todos.md`](01_general_audit_todos.md): **filed 2026-11-25; Tiers 0–6 shipped the same day on `general-audit` (one new finding, SEC-9, found and fixed during implementation). Still open: async jobs, rate limiting, `/metrics`, LLM token/cost reporting** |
 
 Conventions: findings are severity-tagged (🔴/🟠/🟡/🟢), with an effort
 estimate per item (**S** ≤ 0.5d · **M** ≤ 2d · **L** > 2d). Each finding is

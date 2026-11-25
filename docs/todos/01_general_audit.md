@@ -382,6 +382,20 @@ across namespaces (`list_documents` ignores it). Document that it is *not*
 an access boundary. If multi-tenancy is ever needed, bind the namespace to
 the API key.
 
+### SEC-9 🟠 litellm copies `./.env` into the process environment on import · ✅ Verified · **S**
+
+*Found during implementation (2026-11-25), not in the original sweep.*
+`litellm/__init__.py` calls `dotenv.load_dotenv()` at import time unless
+`LITELLM_MODE=PRODUCTION`. Importing the LLM engine therefore exported
+**every** key in the working directory's `.env` into `os.environ`,
+including unrelated secrets. Child processes then inherit them, and they
+override pydantic-settings' own file parsing for other components. This
+was found because a settings test passed alone but failed after any test
+had imported litellm. **Fix:** set
+`os.environ.setdefault("LITELLM_MODE", "PRODUCTION")` before the import
+(`sentiment/llm.py`) and in the Docker image. Settings already read `.env`
+themselves.
+
 ---
 
 ## 3. Architecture
