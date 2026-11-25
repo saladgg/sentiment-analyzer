@@ -15,7 +15,7 @@ import os
 import warnings
 from typing import Annotated, Any, Literal
 
-from pydantic import AliasChoices, Field, SecretStr, field_validator
+from pydantic import AliasChoices, Field, SecretStr, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 EngineSetting = Literal["rule_based", "hf_transformer", "llm"]
@@ -119,9 +119,14 @@ class Settings(BaseSettings):
     def _split_lists(cls, value: Any) -> Any:
         return _split_csv(value)
 
+    @field_validator("hf_model_revision", mode="before")
+    @classmethod
+    def _blank_is_none(cls, value: Any) -> Any:
+        return None if isinstance(value, str) and not value.strip() else value
+
     @field_validator("rag_chunk_overlap")
     @classmethod
-    def _overlap_smaller_than_chunk(cls, value: int, info) -> int:
+    def _overlap_smaller_than_chunk(cls, value: int, info: ValidationInfo) -> int:
         size = info.data.get("rag_chunk_size", 500)
         if value >= size:
             raise ValueError("rag_chunk_overlap must be smaller than rag_chunk_size")

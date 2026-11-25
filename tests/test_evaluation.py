@@ -5,6 +5,7 @@ Unit tests for the evaluation harness.
 from __future__ import annotations
 
 import pytest
+
 from sentiment_analyzer.evaluation.harness import EvaluationHarness
 
 

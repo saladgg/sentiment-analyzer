@@ -6,7 +6,7 @@ threadpool instead of on the event loop.
 """
 
 import io
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 
@@ -34,7 +34,7 @@ TextFieldsParam = Annotated[
 
 
 @router.post("/analyze", response_model=AnalysisResponse)
-def analyze(request: AnalysisRequest, service: ServiceDep):
+def analyze(request: AnalysisRequest, service: ServiceDep) -> dict[str, Any]:
     """
     Analyze a JSON list of records, or plain text (``source_type: "text"``).
 
@@ -63,7 +63,7 @@ def _analyze_upload(
     use_rag: bool | None,
     timestamp_field: str | None,
     granularity: Granularity,
-):
+) -> dict[str, Any]:
     if not file.filename or not file.filename.lower().endswith(extension):
         raise UnsupportedInputError(f"Only {extension} files are supported")
 
@@ -94,7 +94,7 @@ def analyze_csv(
     use_rag: bool | None = None,
     timestamp_field: str | None = None,
     granularity: Granularity = "day",
-):
+) -> dict[str, Any]:
     """Analyze sentiment from a UTF-8 CSV file upload."""
     return _analyze_upload(
         file=file,
@@ -120,7 +120,7 @@ def analyze_excel(
     use_rag: bool | None = None,
     timestamp_field: str | None = None,
     granularity: Granularity = "day",
-):
+) -> dict[str, Any]:
     """Analyze sentiment from an Excel (.xlsx) file upload (first sheet)."""
     return _analyze_upload(
         file=file,

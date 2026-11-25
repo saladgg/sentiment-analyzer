@@ -90,7 +90,7 @@ def create_app(
 
     docs_enabled = settings.environment != "prod"
     app = FastAPI(
-        title="SentimentAnalyzer",
+        title=settings.app_name,
         description="Input-agnostic, explainable sentiment analysis platform",
         version=app_version(),
         lifespan=lifespan,

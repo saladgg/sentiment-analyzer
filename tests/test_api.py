@@ -292,7 +292,6 @@ class TestLLMEngineViaAPI:
 
     def test_per_record_failure_does_not_fail_the_run(self, client, monkeypatch):
         from sentiment_analyzer.sentiment import llm
-
         from tests.conftest import llm_response
 
         def _completion(**kwargs):
@@ -442,6 +441,9 @@ class TestRagABTest:
             json={"source_type": "text", "sentiment_engine": "llm", "data": "good"},
         )
         assert response.status_code == 422
+        # Rejected up front: no half-finished base run is saved.
+        assert client.get(f"{API}/runs").json()["total"] == 0
+        assert fake_llm["calls"] == []
 
 
 class TestEvaluationEndpoints:
@@ -577,6 +579,33 @@ class TestPlatform:
         echoed = client.get("/healthz", headers={"X-Request-ID": "abc-123"})
         assert echoed.headers["x-request-id"] == "abc-123"
 
+    def test_error_envelope_is_uniform(self, make_app):
+        with TestClient(make_app(api_keys=["k"], max_upload_bytes=100)) as c:
+            unauthorized = c.get(f"{API}/runs")
+            invalid = c.post(f"{API}/analyze", json={}, headers={"X-API-Key": "k"})
+            too_big = c.post(
+                f"{API}/analyze",
+                content=b"x" * 500,
+                headers={"X-API-Key": "k", "content-type": "application/json"},
+            )
+            missing = c.get("/nope")
+        for response, status, code in [
+            (unauthorized, 401, "unauthorized"),
+            (invalid, 422, "validation_error"),
+            (too_big, 413, "input_too_large"),
+            (missing, 404, "not_found"),
+        ]:
+            body = response.json()
+            assert response.status_code == status
+            assert body["code"] == code
+            assert body["request_id"] == response.headers["x-request-id"]
+        assert unauthorized.headers["www-authenticate"] == "X-API-Key"
+        assert isinstance(invalid.json()["detail"], list)
+
+    def test_app_name_is_the_openapi_title(self, make_app):
+        with TestClient(make_app(app_name="Acme Sentiment")) as c:
+            assert c.get("/openapi.json").json()["info"]["title"] == "Acme Sentiment"
+
     def test_unexpected_errors_return_generic_500(self, make_app):
         from sentiment_analyzer.api.deps import get_service
 
@@ -591,7 +620,7 @@ class TestPlatform:
         assert response.status_code == 500
         assert response.json()["detail"] == "Internal server error"
         assert "secret" not in response.text
-        assert response.json()["request_id"]
+        assert response.json()["request_id"] == response.headers["x-request-id"]
 
     def test_cors_preflight(self, client):
         response = client.options(

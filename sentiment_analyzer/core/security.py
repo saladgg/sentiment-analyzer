@@ -11,6 +11,7 @@ from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import APIKeyHeader
+
 from sentiment_analyzer.core.config import Settings
 
 API_KEY_HEADER = "X-API-Key"

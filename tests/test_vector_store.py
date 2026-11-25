@@ -11,6 +11,7 @@ import sys
 import textwrap
 
 import pytest
+
 from sentiment_analyzer.rag.vector_store import COLLECTION_NAME, VectorStore
 
 

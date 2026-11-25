@@ -1,6 +1,6 @@
 """Engine discovery endpoint."""
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
 
@@ -16,7 +16,7 @@ router = APIRouter(tags=["Engines"])
 def list_engines(
     engines: Annotated[EngineRegistry, Depends(get_engines)],
     settings: Annotated[Settings, Depends(get_settings)],
-):
+) -> dict[str, Any]:
     """Available engines, whether each is configured/loaded, and input limits."""
     return {
         "engines": engines.describe(),

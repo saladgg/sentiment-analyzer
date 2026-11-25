@@ -12,6 +12,7 @@ Why this exists:
 from typing import Any
 
 import pandas as pd
+
 from sentiment_analyzer.core.errors import InvalidInputError, UnsupportedInputError
 from sentiment_analyzer.ingestion.base import InputAdapter, dataframe_to_records
 

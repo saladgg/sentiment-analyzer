@@ -2,6 +2,8 @@
 Liveness and readiness probes. Unauthenticated, outside ``/api``.
 """
 
+from typing import Any
+
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
@@ -12,13 +14,13 @@ router = APIRouter(tags=["Health"])
 
 
 @router.get("/healthz", response_model=Health)
-def healthz():
+def healthz() -> dict[str, Any]:
     """Liveness: the process is up. Performs no I/O."""
     return {"status": "ok", "version": app_version()}
 
 
 @router.get("/readyz", response_model=Readiness, responses={503: {"model": Readiness}})
-def readyz(request: Request):
+def readyz(request: Request) -> JSONResponse:
     """Readiness: storage, vector store and the default engine are usable."""
     state = request.app.state
     checks: dict[str, str] = {}

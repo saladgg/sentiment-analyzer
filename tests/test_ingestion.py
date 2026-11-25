@@ -8,6 +8,7 @@ import io
 
 import pandas as pd
 import pytest
+
 from sentiment_analyzer.core.errors import InvalidInputError, UnsupportedInputError
 from sentiment_analyzer.ingestion.base import InputAdapter
 from sentiment_analyzer.ingestion.csv_adapter import CSVAdapter

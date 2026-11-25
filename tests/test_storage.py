@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import duckdb
 import pytest
+
 from sentiment_analyzer.storage.runs import MIGRATIONS, RunRecord, RunStore
 
 
@@ -117,6 +118,7 @@ class TestMigrations:
         store = RunStore(tmp_db_path)
         assert store.schema_version == len(MIGRATIONS)
         old = store.get_run("old")
+        assert old is not None
         assert old["summary"] == {"total_records": 4}
         assert old["status"] == "completed"
         assert old["input_sha256"] is None

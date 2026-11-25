@@ -37,8 +37,9 @@ from typing import Any, Literal
 # Settings already read .env themselves, so opt out.
 os.environ.setdefault("LITELLM_MODE", "PRODUCTION")
 
-import litellm  # noqa: E402
+import litellm
 from pydantic import BaseModel, Field, ValidationError, field_validator
+
 from sentiment_analyzer.core.errors import EngineOutputError, EngineUnavailableError
 from sentiment_analyzer.sentiment.base import BatchItem, SentimentEngine, SentimentResult
 

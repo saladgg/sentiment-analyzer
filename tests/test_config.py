@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
+
 from sentiment_analyzer.core.config import Settings
 
 
@@ -19,6 +20,16 @@ class TestSettings:
         assert [k.get_secret_value() for k in settings.api_keys] == ["one", "two"]
         assert settings.cors_origins == ["https://a.example", "https://b.example"]
         assert settings.auth_enabled
+
+    def test_blank_model_revision_means_latest(self, monkeypatch):
+        monkeypatch.setenv("ASA_HF_MODEL_REVISION", "")
+        assert _settings().hf_model_revision is None
+
+    def test_env_example_is_valid(self):
+        """Every value in .env.example must parse."""
+        settings = Settings(_env_file=".env.example")  # type: ignore[call-arg]
+        assert settings.environment == "dev"
+        assert settings.api_keys == []
 
     def test_secrets_are_not_in_repr(self, monkeypatch):
         monkeypatch.setenv("ASA_LLM_API_KEY", "sk-very-secret")

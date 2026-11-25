@@ -13,6 +13,7 @@ from typing import Any
 
 import chromadb
 from chromadb.config import Settings
+
 from sentiment_analyzer.rag.models import RAGChunk
 
 COLLECTION_NAME = "rag_context"
@@ -23,7 +24,7 @@ _CLIENT_SETTINGS = Settings(anonymized_telemetry=False)
 
 
 class VectorStore:
-    def __init__(self, path: str, embedding_function: Any | None = None):
+    def __init__(self, path: str, embedding_function: Any | None = None) -> None:
         """
         Open (or create) a persistent Chroma store at ``path``.
 
@@ -155,13 +156,13 @@ class VectorStore:
     # ------------------------------------------------------------------
     # MAINTENANCE
     # ------------------------------------------------------------------
-    def delete_document(self, document_id: str):
+    def delete_document(self, document_id: str) -> None:
         """
         Delete all chunks belonging to a document.
         """
         self.collection.delete(where={"document_id": document_id})  # type: ignore[arg-type]
 
-    def list_documents(self):
+    def list_documents(self) -> list[dict[str, Any]]:
         """
         List unique documents stored in the vector DB.
         """
@@ -172,7 +173,7 @@ class VectorStore:
         *,
         namespace: str | None = None,
         source_contains: str | None = None,
-    ):
+    ) -> list[dict[str, Any]]:
         """
         Search documents by metadata (non-embedding search).
 

@@ -5,7 +5,10 @@ explanations, run comparison and time-based aggregation.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
+
 from sentiment_analyzer.analytics.aggregation import aggregate
 from sentiment_analyzer.analytics.anomalies import detect_anomalies
 from sentiment_analyzer.analytics.explainability import explain_record
@@ -118,12 +121,12 @@ class TestCompareRuns:
 
 
 class TestAggregateByTime:
-    records = [
+    records: list[dict[str, Any]] = [
         {"sentiment": "positive", "score": 0.5},
         {"sentiment": "negative", "score": -0.5},
         {"sentiment": "positive", "score": 1.0},
     ]
-    timestamps = ["2026-01-05T10:00:00", "2026-01-05", "2026-03-01"]
+    timestamps: list[object] = ["2026-01-05T10:00:00", "2026-01-05", "2026-03-01"]
 
     @pytest.mark.parametrize(
         ("granularity", "buckets"),
@@ -146,7 +149,11 @@ class TestAggregateByTime:
         assert jan["distribution"] == {"positive": 1, "negative": 1}
 
     def test_skips_unparseable_and_failed(self):
-        records = [*self.records, {"error": "x"}, {"sentiment": "neutral", "score": 0}]
+        records: list[dict[str, Any]] = [
+            *self.records,
+            {"error": "x"},
+            {"sentiment": "neutral", "score": 0},
+        ]
         trend = aggregate_by_time(records, [*self.timestamps, "2026-01-01", None], "year")
         assert trend["unparseable"] == 1
         assert trend["buckets"][0]["count"] == 3

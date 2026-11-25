@@ -7,7 +7,10 @@ and ``litellm.completion`` is monkeypatched, so nothing hits the network.
 
 from __future__ import annotations
 
+import sys
+
 import pytest
+
 from sentiment_analyzer.core.errors import EngineOutputError, EngineUnavailableError
 from sentiment_analyzer.sentiment import llm as llm_module
 from sentiment_analyzer.sentiment.base import SentimentEngine, SentimentResult
@@ -22,7 +25,6 @@ from sentiment_analyzer.sentiment.llm import (
 )
 from sentiment_analyzer.sentiment.registry import EngineRegistry
 from sentiment_analyzer.sentiment.rule_based import RuleBasedSentimentEngine, tokenize
-
 from tests.conftest import FakePipeline, llm_response
 
 
@@ -196,6 +198,11 @@ class TestHuggingFaceEngine:
         engine = HuggingFaceSentimentEngine("dummy")
         engine.pipeline = lambda texts, **kw: [{"label": "POSITIVE", "score": 0.9}]
         assert engine.analyze("x").label == "positive"
+
+    def test_missing_ml_extra_gives_actionable_error(self, stub_hf_transformer, monkeypatch):
+        monkeypatch.setitem(sys.modules, "transformers", None)
+        with pytest.raises(EngineUnavailableError, match="'ml' extra"):
+            stub_hf_transformer["original"]("any-model", None)
 
     def test_config_snapshot(self):
         snap = HuggingFaceSentimentEngine("m", revision="abc").config_snapshot()

@@ -6,6 +6,7 @@ a common requirement for monitoring sentiment drift over time.
 """
 
 from collections import defaultdict
+from collections.abc import Sequence
 from typing import Literal
 
 import pandas as pd
@@ -26,7 +27,7 @@ def _bucket(ts: pd.Timestamp, granularity: Granularity) -> str:
 
 def aggregate_by_time(
     records: list[dict],
-    timestamps: list[object],
+    timestamps: Sequence[object],
     granularity: Granularity = "day",
 ) -> dict:
     """

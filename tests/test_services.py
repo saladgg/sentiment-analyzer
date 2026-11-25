@@ -5,6 +5,7 @@ Tests for the orchestration layer: ``AnalysisService``.
 from __future__ import annotations
 
 import pytest
+
 from sentiment_analyzer.core.errors import (
     EngineUnavailableError,
     InputTooLargeError,

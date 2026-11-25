@@ -25,6 +25,7 @@ vector_store/
 .idea/
 .qodo/
 *.md
+!README.md
 assets/
 tests/
 docker-compose.override.yml

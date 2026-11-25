@@ -5,12 +5,14 @@ Implemented as pure ASGI middleware so streaming bodies are counted
 without being buffered twice.
 """
 
+import json
 import time
 import uuid
 
 import structlog
-from sentiment_analyzer.core.logging import logger
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
+from sentiment_analyzer.core.logging import logger
 
 REQUEST_ID_HEADER = "x-request-id"
 
@@ -45,8 +47,9 @@ class RequestContextMiddleware:
             nonlocal status_code
             if message["type"] == "http.response.start":
                 status_code = message["status"]
-                message.setdefault("headers", [])
-                message["headers"].append((REQUEST_ID_HEADER.encode(), request_id.encode()))
+                headers = message.setdefault("headers", [])
+                if not any(k.lower() == REQUEST_ID_HEADER.encode() for k, _ in headers):
+                    headers.append((REQUEST_ID_HEADER.encode(), request_id.encode()))
             await send(message)
 
         try:
@@ -83,8 +86,9 @@ class BodySizeLimitMiddleware:
 
         headers = dict(scope.get("headers") or [])
         declared = headers.get(b"content-length")
+        request_id = str((scope.get("state") or {}).get("request_id") or "")
         if declared is not None and declared.isdigit() and int(declared) > self.max_bytes:
-            await self._reject(send)
+            await self._reject(send, request_id)
             return
 
         received = 0
@@ -109,14 +113,17 @@ class BodySizeLimitMiddleware:
             await self.app(scope, limited_receive, tracking_send)
         except _BodyTooLarge:
             if not response_started:
-                await self._reject(send)
+                await self._reject(send, request_id)
 
-    async def _reject(self, send: Send) -> None:
-        body = (
-            b'{"detail":"Request body exceeds the '
-            + str(self.max_bytes).encode()
-            + b' byte limit (ASA_MAX_UPLOAD_BYTES)","code":"input_too_large"}'
-        )
+    async def _reject(self, send: Send, request_id: str) -> None:
+        body = json.dumps(
+            {
+                "detail": f"Request body exceeds the {self.max_bytes} byte limit "
+                "(ASA_MAX_UPLOAD_BYTES)",
+                "code": "input_too_large",
+                "request_id": request_id or None,
+            }
+        ).encode()
         await send(
             {
                 "type": "http.response.start",

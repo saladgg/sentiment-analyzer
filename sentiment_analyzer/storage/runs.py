@@ -200,7 +200,7 @@ class RunStore:
             cur.execute("BEGIN TRANSACTION")
             try:
                 cur.execute(
-                    f"INSERT INTO runs ({_RUN_COLUMNS}) "
+                    f"INSERT INTO runs ({_RUN_COLUMNS}) "  # noqa: S608 - constant columns
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         run.run_id,
@@ -285,9 +285,13 @@ class RunStore:
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
 
         with self._cursor() as cur:
-            total_row = cur.execute(f"SELECT count(*) FROM runs {where}", params).fetchone()
+            # `where` holds only fixed "<column> = ?" clauses; values are bound.
+            total_row = cur.execute(
+                f"SELECT count(*) FROM runs {where}",  # noqa: S608
+                params,
+            ).fetchone()
             rows = cur.execute(
-                f"SELECT {_RUN_COLUMNS} FROM runs {where} "
+                f"SELECT {_RUN_COLUMNS} FROM runs {where} "  # noqa: S608
                 "ORDER BY created_at DESC, run_id LIMIT ? OFFSET ?",
                 [*params, limit, offset],
             ).fetchall()
@@ -298,7 +302,8 @@ class RunStore:
         """Load one run's metadata and summary by ID."""
         with self._cursor() as cur:
             row = cur.execute(
-                f"SELECT {_RUN_COLUMNS} FROM runs WHERE run_id = ?", (run_id,)
+                f"SELECT {_RUN_COLUMNS} FROM runs WHERE run_id = ?",  # noqa: S608
+                (run_id,),
             ).fetchone()
         return self._row_to_run(row) if row else None
 

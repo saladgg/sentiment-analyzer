@@ -5,7 +5,7 @@ API routes for listing, inspecting, exporting and comparing analysis runs.
 import csv
 import io
 import json
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
@@ -61,7 +61,7 @@ def list_runs(
     offset: Annotated[int, Query(ge=0)] = 0,
     engine: EngineName | None = None,
     rag_enabled: bool | None = None,
-):
+) -> dict[str, Any]:
     """List past analysis runs, newest first."""
     items, total = store.list_runs(
         limit=limit,
@@ -73,7 +73,7 @@ def list_runs(
 
 
 @router.get("/compare", response_model=RunComparison)
-def compare_runs_endpoint(base_run_id: str, rag_run_id: str, store: StoreDep):
+def compare_runs_endpoint(base_run_id: str, rag_run_id: str, store: StoreDep) -> dict[str, Any]:
     """
     Compare two runs over the same input, record by record.
 
@@ -90,13 +90,15 @@ def rag_ab_test(
     store: StoreDep,
     service: Annotated[AnalysisService, Depends(get_service)],
     engines: Annotated[EngineRegistry, Depends(get_engines)],
-):
+) -> dict[str, Any]:
     """
     Analyze the same input without and with RAG, and compare the two runs.
 
     Only meaningful for engines that read context (currently ``llm``).
     """
     engine_name = str(request.sentiment_engine or service.settings.default_sentiment_engine)
+    if service.enricher is None:
+        raise InvalidInputError("RAG is disabled (ASA_RAG_ENABLED=false); nothing to compare")
     if not engines.engine_class(engine_name).uses_context:
         raise InvalidInputError(
             f"Engine {engine_name!r} ignores RAG context; an A/B test would show no difference"
@@ -124,7 +126,7 @@ def get_run(
     store: StoreDep,
     records_limit: Annotated[int, Query(ge=1, le=1000)] = 100,
     records_offset: Annotated[int, Query(ge=0)] = 0,
-):
+) -> dict[str, Any]:
     """Run metadata, summary, config snapshot and a page of per-record results."""
     run = _load_run(store, run_id)
     return {
@@ -137,7 +139,7 @@ def get_run(
 
 
 @router.get("/{run_id}/export")
-def export_run(run_id: str, store: StoreDep, format: Literal["csv", "json"] = "csv"):  # noqa: A002
+def export_run(run_id: str, store: StoreDep, format: Literal["csv", "json"] = "csv") -> Response:
     """Download a run's per-record results as CSV, or the whole run as JSON."""
     run = _load_run(store, run_id)
     records = store.get_records(run_id)

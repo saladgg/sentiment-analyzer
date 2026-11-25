@@ -10,6 +10,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+
 from api_client import (
     APIError,
     analyze_csv,
@@ -148,7 +149,7 @@ if run_btn:
                 result = analyze_json(
                     plain_text, engine=engine, source_type="text", granularity=granularity
                 )
-            elif uploaded_file.name.lower().endswith(".csv"):
+            elif uploaded_file is not None and uploaded_file.name.lower().endswith(".csv"):
                 result = analyze_csv(uploaded_file, engine=engine, **options)
             else:
                 result = analyze_excel(uploaded_file, engine=engine, **options)

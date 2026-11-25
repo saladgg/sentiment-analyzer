@@ -51,7 +51,7 @@ class FakeEmbeddingFunction(EmbeddingFunction[Documents]):
     def __init__(self) -> None:
         pass
 
-    def __call__(self, input: Documents) -> Embeddings:  # noqa: A002 - Chroma API
+    def __call__(self, input: Documents) -> Embeddings:
         vectors: Embeddings = []
         for text in input:
             vec = np.zeros(self._DIM, dtype=np.float32)
@@ -166,7 +166,11 @@ def stub_hf_transformer(monkeypatch) -> dict[str, Any]:
     """
     from sentiment_analyzer.sentiment import hf_transformer
 
-    state: dict[str, Any] = {"count": 0, "pipeline": None}
+    state: dict[str, Any] = {
+        "count": 0,
+        "pipeline": None,
+        "original": hf_transformer._load_pipeline,
+    }
 
     def _fake_loader(model_name: str, revision: str | None):
         state["count"] += 1

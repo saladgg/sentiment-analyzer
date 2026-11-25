@@ -21,20 +21,58 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
         with:
           enable-cache: true
 
-      - name: Install dev dependencies (fail on a stale lockfile)
-        run: uv sync --locked --group dev
+      - name: Install dependencies (fails on a stale lockfile)
+        run: make install-dev
 
       - name: Format check
         run: make format-check
 
-      - name: Lint
+      - name: Lint & type check
         run: make lint
 
-      - name: Test
+      - name: Test (coverage gate in pyproject.toml)
         run: make test
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+
+      - name: Audit locked dependencies for known vulnerabilities
+        run: make audit
+
+  docker:
+    name: Docker build & smoke test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Build API image
+        run: docker build --target api -t sentiment-analyzer-api:ci .
+
+      - name: Boot and probe /healthz and /readyz
+        run: |
+          docker run -d --name api -p 8000:8000 sentiment-analyzer-api:ci
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:8000/healthz && break
+            sleep 2
+          done
+          curl -fsS http://localhost:8000/readyz
+          curl -fsS -X POST http://localhost:8000/api/v1/analyze \
+            -H 'content-type: application/json' \
+            -d '{"source_type": "text", "data": "great product\nterrible support"}'
+
+      - name: Container logs
+        if: always()
+        run: docker logs api || true

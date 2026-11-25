@@ -6,9 +6,11 @@ RAG HTTP endpoints.
 from __future__ import annotations
 
 import io
+import itertools
 
 import pytest
 from fastapi.testclient import TestClient
+
 from sentiment_analyzer.rag.chunking import chunk_text
 from sentiment_analyzer.rag.context_enrichment import RAGContextEnricher
 from sentiment_analyzer.rag.models import RAGChunk, RAGResult
@@ -48,7 +50,7 @@ class TestChunking:
         text = ". ".join(f"Sentence number {i} is here" for i in range(20)) + "."
         chunks = chunk_text(text, 80, 30)
         assert len(chunks) > 1
-        for prev, nxt in zip(chunks, chunks[1:], strict=False):
+        for prev, nxt in itertools.pairwise(chunks):
             assert nxt.split(" ")[0] in prev.split(" ")
 
     def test_paragraphs_and_long_words(self):

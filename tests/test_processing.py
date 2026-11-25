@@ -6,9 +6,11 @@ normalization, and validation.
 from __future__ import annotations
 
 import math
+from typing import Any
 
 import pandas as pd
 import pytest
+
 from sentiment_analyzer.processing.field_detector import detect_text_fields
 from sentiment_analyzer.processing.normalizer import is_missing, normalize_record
 from sentiment_analyzer.processing.validator import validate_record
@@ -30,7 +32,7 @@ class TestDetectTextFields:
 
     def test_looks_past_a_blank_first_record(self):
         """BUG-3: the first record used to be the only sample."""
-        records = [
+        records: list[dict[str, Any]] = [
             {"id": 1, "comment": None},
             {"id": 2, "comment": "terrible service today"},
             {"id": 3, "comment": "really great support team"},

@@ -5,7 +5,7 @@ These endpoints are intentionally separated from inference
 to keep evaluation explicit and auditable.
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
 
@@ -25,7 +25,7 @@ router = APIRouter(prefix="/evaluation", tags=["Evaluation"])
 
 
 @router.post("/sentiment", response_model=AccuracyResponse)
-def evaluate_sentiment(payload: AccuracyRequest):
+def evaluate_sentiment(payload: AccuracyRequest) -> dict[str, Any]:
     """
     Score existing predictions against ground-truth labels.
 
@@ -44,7 +44,7 @@ def evaluate_sentiment(payload: AccuracyRequest):
 def evaluate_engine(
     payload: EngineEvaluationRequest,
     service: Annotated[AnalysisService, Depends(get_service)],
-):
+) -> dict[str, Any]:
     """
     Run an engine over labeled texts and report accuracy, per-class
     precision/recall/F1, macro-F1 and the confusion matrix.

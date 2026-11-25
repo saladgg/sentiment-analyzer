@@ -12,7 +12,7 @@ namespace is a grouping label, not an access boundary.
 """
 
 import uuid
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 
@@ -45,7 +45,7 @@ def upload_document(
     store: StoreDep,
     settings: SettingsDep,
     namespace: Annotated[str, Query(pattern=NAMESPACE_PATTERN)] = "default",
-):
+) -> dict[str, Any]:
     """
     Upload a UTF-8 text document to be used as RAG context.
 
@@ -82,7 +82,9 @@ def upload_document(
 # Retrieval preview (semantic search)
 # ---------------------------------------------------------------------
 @router.post("/retrieve", response_model=list[RetrieveHit])
-def retrieve_context(payload: RetrieveRequest, store: StoreDep, settings: SettingsDep):
+def retrieve_context(
+    payload: RetrieveRequest, store: StoreDep, settings: SettingsDep
+) -> list[dict[str, Any]]:
     """
     Preview what context would be retrieved for a given query.
 
@@ -113,13 +115,13 @@ def retrieve_context(payload: RetrieveRequest, store: StoreDep, settings: Settin
 def list_documents(
     store: StoreDep,
     namespace: Annotated[str | None, Query(pattern=NAMESPACE_PATTERN)] = None,
-):
+) -> list[dict[str, Any]]:
     """List uploaded RAG documents, optionally within one namespace."""
     return store.search_documents(namespace=namespace)
 
 
 @router.delete("/documents/{document_id}", response_model=RagDeleteResponse)
-def delete_document(document_id: str, store: StoreDep):
+def delete_document(document_id: str, store: StoreDep) -> dict[str, Any]:
     """Delete a document and all its chunks from the vector store."""
     store.delete_document(document_id)
     return {"status": "deleted", "document_id": document_id}

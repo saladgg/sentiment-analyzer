@@ -7,13 +7,14 @@ This engine provides:
 - Calibrated polarity from the full class distribution
 
 Works with binary (positive/negative), three-class
-(negative/neutral/positive) and 1–5 star models.
+(negative/neutral/positive) and 1-5 star models.
 """
 
 import re
 from collections.abc import Sequence
 from typing import Any
 
+from sentiment_analyzer.core.errors import EngineUnavailableError
 from sentiment_analyzer.sentiment.base import BatchItem, Label, SentimentEngine, SentimentResult
 
 _STAR_RE = re.compile(r"([1-5])\s*star")
@@ -22,7 +23,13 @@ _GENERIC_RE = re.compile(r"label_(\d+)")
 
 def _load_pipeline(model_name: str, revision: str | None) -> Any:
     """Build the transformers pipeline. Imported lazily: torch is heavy."""
-    from transformers import pipeline
+    try:
+        from transformers import pipeline
+    except ImportError as exc:
+        raise EngineUnavailableError(
+            "The hf_transformer engine needs the 'ml' extra: "
+            "pip install 'sentiment-analyzer[ml]' (or uv sync --extra ml)"
+        ) from exc
 
     return pipeline(task="text-classification", model=model_name, revision=revision)
 
