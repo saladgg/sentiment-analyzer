@@ -12,8 +12,8 @@ match that file.
 >
 > **Release follow-up (REL-1, new):** the `v1.1.0` image publish failed.
 > semantic-release bumped `pyproject.toml` but not `uv.lock`, so the
-> tag's `uv sync --locked` failed. Fixed in PR #7 (the build command
-> refreshes and commits the lock); its `v1.1.1` release republishes the
+> tag's `uv sync --locked` failed. Fixed in PR #8 (the build command
+> refreshes and commits the lock); its `v1.2.0` release republishes the
 > images.
 >
 > **New findings during implementation:** SEC-9 (litellm loading `.env`

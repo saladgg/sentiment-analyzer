@@ -428,7 +428,7 @@ new version into `pyproject.toml`, but `uv.lock` also records the project's
 own version and was not updated. The `v1.1.0` tag therefore had a lock that
 `uv sync --locked` rejects, and both GHCR image builds failed. `main` was left
 in the same state, so CI on any new branch would fail at install. **Fix
-(PR #7):** the semantic-release `build_command` runs `uv lock` and stages
+(PR #8):** the semantic-release `build_command` runs `uv lock` and stages
 `uv.lock` into the release commit, and the job then runs `uv lock --check`.
 CI couldn't catch this, because the version bump only exists inside the
 release job.
