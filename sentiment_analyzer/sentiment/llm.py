@@ -30,6 +30,7 @@ import threading
 from collections import OrderedDict
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from typing import Any, Literal
 
 # litellm calls load_dotenv() on import unless LITELLM_MODE=PRODUCTION, which
@@ -41,7 +42,7 @@ import litellm
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from sentiment_analyzer.core.errors import EngineOutputError, EngineUnavailableError
-from sentiment_analyzer.sentiment.base import BatchItem, SentimentEngine, SentimentResult
+from sentiment_analyzer.sentiment.base import BatchItem, SentimentEngine, SentimentResult, Usage
 
 SYSTEM_PROMPT = (
     "You are a sentiment analysis engine.\n"
@@ -199,16 +200,30 @@ class LLMSentimentEngine(SentimentEngine):
         with self._cache_lock:
             if key in self._cache:
                 self._cache.move_to_end(key)
-                return self._cache[key]
+                return replace(self._cache[key], usage=Usage(cost_usd=0.0, cached=True))
 
         response = litellm.completion(**self._completion_kwargs(text, context))
-        result = parse_llm_output(response.choices[0].message.content)
+        result = replace(
+            parse_llm_output(response.choices[0].message.content),
+            usage=self._usage(response),
+        )
 
         with self._cache_lock:
             self._cache[key] = result
             if len(self._cache) > _CACHE_SIZE:
                 self._cache.popitem(last=False)
         return result
+
+    def _usage(self, response: Any) -> Usage:
+        """Token counts from the response and litellm's cost estimate."""
+        raw = getattr(response, "usage", None)
+        prompt = int(getattr(raw, "prompt_tokens", 0) or 0)
+        completion = int(getattr(raw, "completion_tokens", 0) or 0)
+        try:
+            cost: float | None = float(litellm.completion_cost(completion_response=response))
+        except Exception:  # noqa: BLE001 - unknown model pricing is not an error
+            cost = None
+        return Usage(prompt_tokens=prompt, completion_tokens=completion, cost_usd=cost)
 
     def analyze_batch(
         self,

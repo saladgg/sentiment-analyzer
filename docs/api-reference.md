@@ -17,6 +17,10 @@ Outside `prod` you can browse it at:
 
 With `ASA_ENVIRONMENT=prod` these three URLs are disabled.
 
+The schema is pinned by a snapshot test
+([`tests/test_openapi.py`](../tests/test_openapi.py)); an intended contract
+change means regenerating it with `UPDATE_SNAPSHOTS=1`.
+
 ## Conventions
 
 ### Authentication
@@ -31,7 +35,24 @@ X-API-Key: <key>
 A missing or wrong key returns `401` (`code: "unauthorized"`, the standard
 [error envelope](#errors)) and a `WWW-Authenticate: X-API-Key` header. When no keys are configured
 the API is open; this is only allowed with `ASA_ENVIRONMENT=dev`, and the app
-refuses to start otherwise. `/healthz` and `/readyz` never require a key.
+refuses to start otherwise. `/healthz` and `/readyz` never require a key;
+`/metrics` does whenever auth is on.
+
+There are two kinds of key:
+
+| Setting             | Access |
+| ------------------- | ------ |
+| `ASA_API_KEYS`      | Everything. |
+| `ASA_API_READ_KEYS` | Read-only: `GET` and `HEAD` requests (list/inspect/export runs and jobs, list engines and documents). Any other method returns `403` (`code: "forbidden"`). Read keys require at least one full key. |
+
+### Rate limiting
+
+Each client gets `ASA_RATE_LIMIT_PER_MINUTE` requests per minute (default
+120; `0` disables), refilled continuously as a token bucket. A client is its
+API key or, when auth is off, its IP address. Over the limit, requests get
+`429` (`code: "rate_limited"`) with a `Retry-After` header in seconds.
+`/healthz`, `/readyz` and `/metrics` are not rate limited. Buckets live in
+process memory, which matches the single-process deployment.
 
 The `curl` examples below assume:
 
@@ -44,9 +65,8 @@ KEY=your-key   # omit -H "X-API-Key: $KEY" when auth is disabled
 
 Responses carry an `X-Request-ID` header. If the request sends a printable
 `X-Request-ID` of at most 128 characters it is reused; otherwise a new one is
-generated. The same ID appears in error bodies and on every log line for the
-request. (Unhandled-error `500` responses are produced outside the request-ID
-middleware, so they have the ID in the body but not in the header.)
+generated. The same ID appears in error bodies (including `500`s) and on
+every log line for the request.
 
 ### Limits
 
@@ -57,7 +77,12 @@ middleware, so they have the ID in the body but not in the header.)
 | `ASA_MAX_LLM_RECORDS`  | 500     | More records in one run of a paid engine (`llm`) get `413`.              |
 | `ASA_MAX_TEXT_CHARS`   | 5,000   | Longer texts are truncated and the record is flagged `truncated: true`. |
 
-`GET /engines` returns the current values.
+[Background jobs](#background-jobs) have their own, larger limits:
+`ASA_MAX_JOB_UPLOAD_BYTES` (100 MB), `ASA_MAX_JOB_RECORDS` (100,000) and
+`ASA_MAX_LLM_JOB_RECORDS` (5,000). A synchronous request over its record
+limit gets a `413` whose `detail` points at the job endpoint.
+
+`GET /engines` returns the synchronous limits.
 
 ### CORS
 
@@ -91,6 +116,25 @@ otherwise:
 ```
 
 A failed check reads `"error: <ExceptionType>"` and `status` is `"not_ready"`.
+
+### `GET /metrics`
+
+Prometheus text format (not in the OpenAPI schema). Requires an API key when
+auth is on; not rate limited. Prometheus can send the header with
+`http_headers: {X-API-Key: {secrets: [...]}}` in the scrape config.
+
+| Metric | Labels | Meaning |
+| ------ | ------ | ------- |
+| `asa_http_requests_total` | `method`, `route`, `status` | Requests by route *template* (e.g. `/api/v1/runs/{run_id}`); unmatched paths are `unmatched`. |
+| `asa_http_request_duration_seconds` | `method`, `route` | Latency histogram. |
+| `asa_analysis_runs_total` | `engine`, `status` | Completed runs (`completed` / `completed_with_errors`). |
+| `asa_records_analyzed_total` | `engine`, `outcome` | Records by `ok` / `failed`. |
+| `asa_engine_batch_duration_seconds` | `engine` | Time per engine batch call. |
+| `asa_rag_retrieval_duration_seconds` | | Time per RAG batch lookup. |
+| `asa_llm_calls_total` | `source` | LLM requests made (`api`) vs served from cache (`cache`). |
+| `asa_llm_tokens_total` | `kind` | `prompt` / `completion` tokens. |
+| `asa_llm_cost_usd_total` | | Estimated spend from litellm pricing (unknown models count 0). |
+| `asa_jobs` | `status` | Background jobs currently `queued` / `running`. |
 
 ## Engines
 
@@ -198,7 +242,8 @@ curl -s -X POST "$API/analyze" \
     "distribution": {"positive": 1, "negative": 1, "neutral": 1},
     "dominant_sentiment": "positive",
     "avg_score": 0.0,
-    "avg_confidence": 0.6667
+    "avg_confidence": 0.6667,
+    "llm_usage": null
   },
   "records": [
     {
@@ -277,6 +322,75 @@ A filename not ending in `.xlsx` gives `415`; an unreadable workbook gives
 curl -s -X POST "$API/analyze/excel?sentiment_engine=llm" \
   -H "X-API-Key: $KEY" -F "file=@feedback.xlsx"
 ```
+
+## Background jobs
+
+For inputs too large or slow for one request. A job runs the same pipeline as
+`POST /analyze` and produces a normal run.
+
+Submissions are validated **before** they are queued (engine, limits, text
+fields, timestamp field, `use_rag`), so bad input still gets an immediate 4xx
+and nothing is queued. Up to `ASA_JOB_WORKERS` jobs run at once (default 1);
+up to `ASA_MAX_QUEUED_JOBS` (default 20) can wait. Beyond that, submissions get
+`429` (`code: "job_queue_full"`).
+
+Jobs run inside the API process. The job *record* is stored in DuckDB, but the
+*input* is held in memory, so a restart can't resume a queued or running job:
+at the next startup such jobs are marked `failed` with
+`"Interrupted by a server restart; resubmit the job"`. Finished jobs older than
+`ASA_JOB_RETENTION_DAYS` (30) are pruned at startup; their runs are kept. On
+shutdown, queued jobs are cancelled and running ones get up to
+`ASA_JOB_SHUTDOWN_TIMEOUT` seconds (30) to finish.
+
+### `POST /jobs/analyze`, `POST /jobs/analyze/csv`, `POST /jobs/analyze/excel`
+
+Same request bodies and query parameters as `POST /analyze`,
+`/analyze/csv` and `/analyze/excel`, with the job limits. Response:
+`202 Accepted` with a `Job`:
+
+```json
+{
+  "job_id": "0b6f0c2e-8f0e-4f6a-9f57-3d2b1c4a9e10",
+  "status": "queued",
+  "engine": "rule_based",
+  "source_type": "csv",
+  "records_total": 25000,
+  "records_done": 0,
+  "progress": 0.0,
+  "run_id": null,
+  "error": null,
+  "created_at": "2026-11-25T10:00:00Z",
+  "started_at": null,
+  "finished_at": null
+}
+```
+
+`status` is one of `queued`, `running`, `completed`, `failed`, `cancelled`.
+`progress` (0–1) is updated as records are processed (persisted at most once
+a second). When `completed`, `run_id` points at the run: fetch it with
+[`GET /runs/{run_id}`](#get-runsrun_id) or
+[export it](#get-runsrun_idexport). When `failed`, `error` says why
+(internal errors are not detailed; see the server log by request ID).
+
+```bash
+JOB=$(curl -s -X POST "$API/jobs/analyze/csv" -H "X-API-Key: $KEY" \
+  -F "file=@reviews.csv" | jq -r .job_id)
+curl -s "$API/jobs/$JOB" -H "X-API-Key: $KEY" | jq '{status, progress, run_id}'
+```
+
+### `GET /jobs`
+
+Newest first. Query: `limit` (1–500, default 50), `offset`, `status`.
+Response: `{"items": [Job, ...], "total", "limit", "offset"}`.
+
+### `GET /jobs/{job_id}`
+
+One `Job`; `404` if unknown.
+
+### `DELETE /jobs/{job_id}`
+
+Cancel a **queued** job; returns the `Job` with `status: "cancelled"`. A
+running or finished job returns `409`.
 
 ## Runs
 
@@ -694,12 +808,15 @@ the `X-Request-ID` response header:
 | Status | `code`                  | Typical causes |
 | ------ | ----------------------- | -------------- |
 | `401`  | `unauthorized`          | Missing or wrong `X-API-Key`. |
+| `403`  | `forbidden`             | A read-only key (`ASA_API_READ_KEYS`) used for a non-`GET`/`HEAD` request. |
+| `429`  | `rate_limited`          | Over `ASA_RATE_LIMIT_PER_MINUTE`; see the `Retry-After` header. |
+| `429`  | `job_queue_full`        | `ASA_MAX_QUEUED_JOBS` jobs are already waiting. |
 | `413`  | `input_too_large`       | Body or file over `ASA_MAX_UPLOAD_BYTES`; more than `ASA_MAX_RECORDS` / `ASA_MAX_LLM_RECORDS` records or evaluation items. |
 | `415`  | `unsupported_input`     | Wrong upload extension; CSV or RAG document not UTF-8. |
 | `422`  | `invalid_input`         | No text fields detected; unknown `text_fields` or `timestamp_field`; unparseable CSV/Excel; empty RAG document; `use_rag: true` while RAG is disabled; `/runs/ab` with an engine that ignores context. |
 | `422`  | `validation_error`      | Request failed schema validation (wrong types, missing fields, bad enum or namespace values). `detail` is FastAPI's list of `{type, loc, msg, input, ...}` objects rather than a string. |
-| `404`  | `not_found`             | Unknown run id or unknown path. |
-| `409`  | `conflict`              | Comparing runs of different inputs. |
+| `404`  | `not_found`             | Unknown run or job id, or unknown path. |
+| `409`  | `conflict`              | Comparing runs of different inputs; cancelling a job that isn't queued. |
 | `503`  | `engine_unavailable`    | Unknown engine, `llm` without `ASA_LLM_MODEL`, `hf_transformer` without the `ml` extra, or an engine that failed to load. |
 | `502`  | `engine_output_invalid` | An engine returned output that breaks the engine contract (e.g. invalid LLM JSON). During analysis and engine evaluation this is caught per record, so it normally shows up as a record's `error` (`EngineOutputError: ...`) rather than as the response status. |
 | `500`  | `internal_error`        | Unexpected error. Details are logged with the request ID, not returned. |

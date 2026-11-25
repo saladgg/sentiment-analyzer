@@ -70,6 +70,7 @@ class EngineOutputError(AppError):
 _HTTP_CODES = {
     401: "unauthorized",
     403: "forbidden",
+    429: "rate_limited",
     404: "not_found",
     405: "method_not_allowed",
 }

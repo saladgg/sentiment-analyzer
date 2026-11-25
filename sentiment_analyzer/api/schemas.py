@@ -118,6 +118,17 @@ class Anomaly(RecordSentiment):
     z_score: float
 
 
+class LLMUsage(BaseModel):
+    """Totals for paid-engine calls in one run."""
+
+    requests: int
+    cached: int
+    prompt_tokens: int
+    completion_tokens: int
+    cost_usd: float
+    cost_complete: bool
+
+
 class Summary(BaseModel):
     total_records: int
     failed_records: int = 0
@@ -125,6 +136,7 @@ class Summary(BaseModel):
     dominant_sentiment: SentimentLabel | None
     avg_score: float | None = None
     avg_confidence: float | None = None
+    llm_usage: LLMUsage | None = None
 
 
 class RAGMetadata(BaseModel):
@@ -240,6 +252,36 @@ class ABTestResponse(BaseModel):
     base: AnalysisResponse
     rag: AnalysisResponse
     comparison: RunComparison
+
+
+# ----------------------------------------------------------------------
+# Background jobs
+# ----------------------------------------------------------------------
+JobStatus = Literal["queued", "running", "completed", "failed", "cancelled"]
+
+
+class Job(BaseModel):
+    """A background analysis job. ``run_id`` is set once it completes."""
+
+    job_id: str
+    status: JobStatus
+    engine: str | None
+    source_type: str | None
+    records_total: int | None
+    records_done: int | None
+    progress: float
+    run_id: str | None
+    error: str | None
+    created_at: datetime | None
+    started_at: datetime | None
+    finished_at: datetime | None
+
+
+class JobPage(BaseModel):
+    items: list[Job]
+    total: int
+    limit: int
+    offset: int
 
 
 # ----------------------------------------------------------------------

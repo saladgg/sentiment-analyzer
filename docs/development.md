@@ -107,7 +107,11 @@ Test files:
 | --------------------------------- | --------------------------------------------------------- |
 | `tests/test_api.py`               | HTTP routes, auth, errors, limits, request IDs, health    |
 | `tests/test_config.py`            | Settings parsing, validation, deprecated alias            |
-| `tests/test_services.py`          | `AnalysisService.run` orchestration                       |
+| `tests/test_services.py`          | `AnalysisService` orchestration, LLM usage, progress      |
+| `tests/test_jobs.py`              | Background jobs: submit, poll, limits, queue, cancel, recovery |
+| `tests/test_security.py`          | Read-only keys and rate limiting                          |
+| `tests/test_metrics.py`           | `/metrics` content and access                             |
+| `tests/test_openapi.py`           | OpenAPI contract snapshot (`tests/snapshots/openapi.json`) |
 | `tests/test_sentiment_engines.py` | `SentimentResult`, each engine, the registry              |
 | `tests/test_processing.py`        | Field detection, normalization, validation                |
 | `tests/test_ingestion.py`         | CSV / Excel / JSON / text adapters                        |
@@ -117,6 +121,13 @@ Test files:
 | `tests/test_vector_store.py`      | Chroma vector store                                       |
 | `tests/test_evaluation.py`        | `EvaluationHarness`                                       |
 | `tests/test_frontend_client.py`   | Frontend `api_client`                                     |
+
+`tests/test_openapi.py` fails whenever the API schema changes. After an
+intended change, regenerate the snapshot and commit it:
+
+```bash
+UPDATE_SNAPSHOTS=1 uv run pytest tests/test_openapi.py
+```
 
 ## Linting and types
 
@@ -128,8 +139,8 @@ Test files:
   `target-version = "py313"`. Tests may use `assert` and test secrets/paths.
 - **mypy** — over `sentiment_analyzer`, `tests` and `frontend`, with
   `check_untyped_defs = true`; inside `sentiment_analyzer`,
-  `disallow_incomplete_defs = true` (a partly annotated function must be fully
-  annotated). `ignore_missing_imports = true`.
+  `disallow_untyped_defs = true` (every function fully annotated).
+  `ignore_missing_imports = true`.
 
 `make format-check` is what CI runs; `make format` writes the changes.
 
@@ -235,6 +246,11 @@ push to `main`:
    `ghcr.io/<owner>/sentiment-analyzer-ui`, tagged with the version and
    `latest`, with an SBOM and provenance attestation.
 
+The build command refreshes `uv.lock` (which records the project's own
+version) and stages it into the release commit. Without it, the tagged tree's
+lock is stale and `uv sync --locked`, and so the image build, fails. After
+releasing, the job runs `uv lock --check` as a guard.
+
 Semantic-release is configured in `pyproject.toml` under
 `[tool.semantic_release]`:
 
@@ -242,7 +258,11 @@ Semantic-release is configured in `pyproject.toml` under
 commit_parser = "conventional"
 version_toml = ["pyproject.toml:project.version:nf"]
 branch = "main"
-build_command = "python -m build"
+build_command = """
+uv lock
+git add uv.lock
+uv build
+"""
 
 [tool.semantic_release.commit_parser_options]
 allowed_tags = ["feat", "fix", "perf", "refactor", "docs", "chore", "build", "ci", "test", "style"]

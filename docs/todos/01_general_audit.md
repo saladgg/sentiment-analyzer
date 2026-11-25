@@ -421,6 +421,18 @@ The audit also skipped `torch==2.15.0+cpu`, because local `+cpu` builds
 aren't on PyPI. `make audit` now checks the matching upstream release
 instead.
 
+### REL-1 🟠 Release tags carried a stale `uv.lock`; v1.1.0 images never published · ✅ Verified · **S**
+
+*Found after PR #1 merged (2026-11-25).* python-semantic-release stamps the
+new version into `pyproject.toml`, but `uv.lock` also records the project's
+own version and was not updated. The `v1.1.0` tag therefore had a lock that
+`uv sync --locked` rejects, and both GHCR image builds failed. `main` was left
+in the same state, so CI on any new branch would fail at install. **Fix
+(PR #8):** the semantic-release `build_command` runs `uv lock` and stages
+`uv.lock` into the release commit, and the job then runs `uv lock --check`.
+CI couldn't catch this, because the version bump only exists inside the
+release job.
+
 ---
 
 ## 3. Architecture

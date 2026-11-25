@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     # Comma-separated in the environment: ASA_API_KEYS=key-one,key-two
     # Empty means "no auth", which is only allowed when environment=dev.
     api_keys: Annotated[list[SecretStr], NoDecode] = Field(default_factory=list)
+    # Read-only keys: GET/HEAD requests only (list runs, export, engines...).
+    api_read_keys: Annotated[list[SecretStr], NoDecode] = Field(default_factory=list)
+    # Requests per minute per API key (or client IP without auth). 0 disables.
+    rate_limit_per_minute: int = Field(default=120, ge=0)
     cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["http://localhost:5173", "http://localhost:8501"]
     )
@@ -72,6 +76,21 @@ class Settings(BaseSettings):
     max_records: int = Field(default=10_000, gt=0)
     max_text_chars: int = Field(default=5_000, gt=0)
     max_llm_records: int = Field(default=500, gt=0)
+
+    # -------------------------
+    # Background jobs (POST /api/v1/jobs/...)
+    # -------------------------
+    max_job_records: int = Field(default=100_000, gt=0)
+    max_llm_job_records: int = Field(default=5_000, gt=0)
+    max_job_upload_bytes: int = Field(default=100 * 1024 * 1024, gt=0)
+    # Concurrent jobs. Jobs share the process with the API; keep this small.
+    job_workers: int = Field(default=1, ge=1, le=8)
+    # Jobs waiting to start; further submissions get 429.
+    max_queued_jobs: int = Field(default=20, ge=1)
+    # Seconds to wait for running jobs on shutdown before giving up on them.
+    job_shutdown_timeout: float = Field(default=30.0, ge=0)
+    # Finished jobs older than this are pruned from the jobs table.
+    job_retention_days: int = Field(default=30, ge=1)
 
     # -------------------------
     # Engines
@@ -114,7 +133,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("ASA_RUNS_DB_PATH", "ASA_RAG_DB_PATH", "runs_db_path"),
     )
 
-    @field_validator("api_keys", "cors_origins", mode="before")
+    @field_validator("api_keys", "api_read_keys", "cors_origins", mode="before")
     @classmethod
     def _split_lists(cls, value: Any) -> Any:
         return _split_csv(value)
@@ -142,10 +161,12 @@ class Settings(BaseSettings):
 
     @property
     def auth_enabled(self) -> bool:
-        return bool(self.api_keys)
+        return bool(self.api_keys or self.api_read_keys)
 
     def validate_for_startup(self) -> None:
         """Refuse insecure configurations outside local development."""
+        if self.api_read_keys and not self.api_keys:
+            raise RuntimeError("ASA_API_READ_KEYS requires at least one full-access ASA_API_KEYS")
         if self.environment != "dev" and not self.api_keys:
             raise RuntimeError(
                 f"ASA_API_KEYS must be set when ASA_ENVIRONMENT={self.environment!r}"

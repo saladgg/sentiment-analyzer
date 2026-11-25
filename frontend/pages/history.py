@@ -8,7 +8,15 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from api_client import APIError, compare_runs, export_run, get_run, list_runs
+from api_client import (
+    APIError,
+    cancel_job,
+    compare_runs,
+    export_run,
+    get_run,
+    list_jobs,
+    list_runs,
+)
 from theme import SENTIMENT_COLORS
 
 PAGE_SIZE = 25
@@ -48,6 +56,35 @@ nav_info.caption(f"Page {page_number + 1} of {last_page + 1} · {total} runs")
 if nav_next.button("Older →", disabled=page_number >= last_page):
     st.session_state["history_page"] = page_number + 1
     st.rerun()
+
+# ── background jobs ─────────────────────────────────────────────────
+with st.expander("Background jobs"):
+    try:
+        jobs = list_jobs(limit=20)["items"]
+    except APIError as exc:
+        st.error(f"Could not load jobs: {exc}")
+        jobs = []
+    if not jobs:
+        st.caption("No background jobs yet.")
+    else:
+        df_jobs = pd.DataFrame(jobs)
+        df_jobs["progress"] = (df_jobs["progress"] * 100).round(1).astype(str) + "%"
+        st.dataframe(
+            df_jobs[["job_id", "status", "engine", "records_total", "progress", "run_id", "error"]],
+            width="stretch",
+            hide_index=True,
+        )
+        queued = [j["job_id"] for j in jobs if j["status"] == "queued"]
+        if queued:
+            to_cancel = st.selectbox("Queued job", queued)
+            if st.button("Cancel job"):
+                try:
+                    cancel_job(to_cancel)
+                    st.rerun()
+                except APIError as exc:
+                    st.error(f"Cancel failed: {exc}")
+        if st.button("Refresh jobs"):
+            st.rerun()
 
 # ── run detail ──────────────────────────────────────────────────────
 st.subheader("Run Detail")

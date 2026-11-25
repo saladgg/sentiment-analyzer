@@ -44,14 +44,17 @@ ingestion/  processing/  rag/        sentiment/   analytics/
 
 1. Loads `Settings` (or uses the ones passed in) and calls
    `validate_for_startup()`, which refuses to start outside `dev` without
-   API keys.
+   API keys (and refuses read-only keys without a full key).
 2. Configures JSON logging.
 3. Registers middleware: `RequestContextMiddleware` (outermost),
    `BodySizeLimitMiddleware`, then CORS.
 4. Registers the error handlers from
    [`core/errors.py`](../sentiment_analyzer/core/errors.py).
-5. Mounts `/healthz` and `/readyz` without auth, and every API router under
-   `/api/v1` with the `require_api_key` dependency. The same routers are also
+5. Mounts `/healthz` and `/readyz` without auth, `/metrics` behind the API key,
+   and every API router under `/api/v1` with the `require_api_key` then
+   `enforce_rate_limit` dependencies (auth identifies the client, then the
+   per-client token bucket in
+   [`core/security.py`](../sentiment_analyzer/core/security.py) applies). The same routers are also
    mounted under `/api` as a deprecated alias that is hidden from the OpenAPI
    schema.
 6. Disables `/docs`, `/redoc` and `/openapi.json` when
@@ -66,7 +69,10 @@ stores them on `app.state`:
 | `run_store`           | `RunStore(settings.runs_db_path)` (DuckDB). Closed on shutdown.        |
 | `vector_store`        | `VectorStore(settings.vector_store_path)` (persistent Chroma).         |
 | `engines`             | `EngineRegistry(settings)`; engines are built lazily on first use.     |
-| `service`             | `AnalysisService(settings, run_store, engines, enricher)`. The enricher is `None` when `ASA_RAG_ENABLED=false`. |
+| `service`             | `AnalysisService(settings, run_store, engines, enricher, metrics)`. The enricher is `None` when `ASA_RAG_ENABLED=false`. |
+| `jobs`                | `JobManager`: a bounded thread pool for background jobs. On startup it fails jobs a previous process left unfinished and prunes old ones; on shutdown it cancels queued jobs and waits up to `ASA_JOB_SHUTDOWN_TIMEOUT` for running ones. |
+| `metrics`             | Per-app Prometheus registry ([`core/metrics.py`](../sentiment_analyzer/core/metrics.py)), created with the app. |
+| `rate_limiter`        | In-memory token buckets, or `None` when `ASA_RATE_LIMIT_PER_MINUTE=0`. |
 
 If `ASA_WARMUP_DEFAULT_ENGINE=true`, the default engine is built during
 startup; a failure is logged and reported by `/readyz` rather than crashing
@@ -82,7 +88,7 @@ offline stub.
 | Layer / package                                 | Responsibility                                                                                   |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | [api/](../sentiment_analyzer/api)               | FastAPI routers, dependencies and Pydantic request/response schemas. No business logic.          |
-| [services/](../sentiment_analyzer/services)     | `AnalysisService`: ingestion → processing → RAG → engine → analytics → storage.                  |
+| [services/](../sentiment_analyzer/services)     | `AnalysisService`: ingestion → processing → RAG → engine → analytics → storage, split into `prepare()` (validate) and `run_prepared()` (execute, in chunks with progress). `JobManager`: background jobs. |
 | [ingestion/](../sentiment_analyzer/ingestion)   | Adapters that turn raw input (records, text, CSV, Excel) into `list[dict]`.                      |
 | [processing/](../sentiment_analyzer/processing) | Missing-value normalization, text-field detection, record validation.                            |
 | [sentiment/](../sentiment_analyzer/sentiment)   | `SentimentEngine` interface, `SentimentResult`, the three engines and the `EngineRegistry`.      |
@@ -190,6 +196,18 @@ not contain their own `try/except` blocks. See
 - Logs are JSON, one object per line, with the request ID on every line
   emitted during a request.
 
+## Background jobs
+
+`POST /api/v1/jobs/...` calls `AnalysisService.prepare()` in the request, so
+validation errors are returned immediately. The prepared input is handed to
+`JobManager.submit()`, which records the job in DuckDB (`jobs` table) and
+queues `run_prepared()` on its thread pool (`ASA_JOB_WORKERS`). The pipeline
+processes records in chunks of 256 and reports progress, which the manager
+persists at most once a second. A completed job stores the `run_id` of the
+normal run it produced. The job input lives only in memory, so jobs can't
+survive a restart; they are failed with an explanatory error at the next
+startup. See [api-reference.md](api-reference.md#background-jobs).
+
 ## Deployment constraints
 
 - **Single process.** DuckDB allows one writing process per database file,
@@ -197,6 +215,10 @@ not contain their own `try/except` blocks. See
   uvicorn worker (the Docker image does). Within that process, the run store
   uses one connection with a cursor per operation and a write lock, which is
   safe across the threadpool.
+- Rate-limit buckets, the job queue and the LLM result cache are in process
+  memory, which is consistent with the single process.
+- Background jobs share the process (and CPU) with the API. Keep
+  `ASA_JOB_WORKERS` small.
 - Stop the API before running the RAG bootstrap script against the same
   store.
 

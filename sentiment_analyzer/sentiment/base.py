@@ -24,6 +24,18 @@ def _clamp(value: float, low: float, high: float) -> float:
 
 
 @dataclass(frozen=True)
+class Usage:
+    """Cost of producing one result (paid engines only)."""
+
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    #: Estimated USD cost; ``None`` when the provider's pricing is unknown.
+    cost_usd: float | None = 0.0
+    #: Served from the engine's cache: no request was made, nothing billed.
+    cached: bool = False
+
+
+@dataclass(frozen=True)
 class SentimentResult:
     """Normalized output of a sentiment engine for one text."""
 
@@ -31,6 +43,7 @@ class SentimentResult:
     polarity: float
     confidence: float
     drivers: dict[str, float] = field(default_factory=dict)
+    usage: Usage | None = None
 
     def __post_init__(self) -> None:
         if self.label not in LABELS:

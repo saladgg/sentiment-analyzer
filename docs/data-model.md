@@ -83,7 +83,20 @@ class Summary(BaseModel):
     dominant_sentiment: SentimentLabel | None
     avg_score: float | None = None
     avg_confidence: float | None = None
+    llm_usage: LLMUsage | None = None  # paid engines only
+
+
+class LLMUsage(BaseModel):
+    requests: int  # billed requests made
+    cached: int  # records served from the engine's cache (not billed)
+    prompt_tokens: int
+    completion_tokens: int
+    cost_usd: float  # litellm's estimate, summed over priced requests
+    cost_complete: bool  # False if some requests had no known pricing
 ```
+
+`llm_usage` comes from the per-result `Usage` the LLM engine attaches
+(tokens from the provider response, cost from `litellm.completion_cost`).
 
 Computed by [`aggregate`](../sentiment_analyzer/analytics/aggregation.py) over
 successful records only. Ties for the dominant label are broken in the order

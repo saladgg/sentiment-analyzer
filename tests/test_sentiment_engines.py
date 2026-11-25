@@ -293,10 +293,25 @@ class TestLLMEngine:
         engine = LLMSentimentEngine("test-model")
         first = engine.analyze("good", context=None)
         second = engine.analyze("good", context=None)
-        assert first == second
+        assert (first.label, first.polarity) == (second.label, second.polarity)
+        assert first.usage is not None and not first.usage.cached
+        assert first.usage.prompt_tokens == 10
+        assert first.usage.cost_usd == 0.001
+        # A cache hit makes no request and costs nothing.
+        assert second.usage is not None and second.usage.cached
+        assert second.usage.cost_usd == 0.0
         assert len(fake_llm["calls"]) == 1
         engine.analyze("good", context="other")
         assert len(fake_llm["calls"]) == 2
+
+    def test_unknown_pricing_gives_no_cost(self, fake_llm, monkeypatch):
+        def _no_price(completion_response):
+            raise ValueError("model not mapped")
+
+        monkeypatch.setattr(llm_module.litellm, "completion_cost", _no_price)
+        usage = LLMSentimentEngine("test-model").analyze("good").usage
+        assert usage is not None and usage.cost_usd is None
+        assert usage.prompt_tokens == 10
 
     def test_cache_is_bounded(self, fake_llm, monkeypatch):
         monkeypatch.setattr(llm_module, "_CACHE_SIZE", 2)

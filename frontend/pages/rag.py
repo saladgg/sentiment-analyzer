@@ -54,11 +54,18 @@ if st.button("Upload", type="primary", disabled=doc_file is None):
 st.divider()
 st.subheader("Stored Documents")
 
-if st.button("Refresh list"):
-    st.rerun()
+col_filter, col_refresh = st.columns([3, 1])
+with col_filter:
+    ns_filter = st.text_input(
+        "Filter by namespace", placeholder="all namespaces", key="ns_filter"
+    ).strip()
+with col_refresh:
+    st.write("")
+    if st.button("Refresh list"):
+        st.rerun()
 
 try:
-    docs = list_rag_documents()
+    docs = list_rag_documents(ns_filter or None)
 except APIError as exc:
     st.error(f"Could not load documents: {exc}")
     docs = []
