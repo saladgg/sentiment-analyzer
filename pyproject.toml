@@ -4,7 +4,7 @@
 
 [project]
 name = "sentiment-analyzer"
-version = "v1.0.0"
+version = "1.0.0"
 description = "Input-agnostic, explainable sentiment analysis platform with optional RAG-based context enrichment."
 readme = "README.md"
 requires-python = ">=3.13"
@@ -21,6 +21,7 @@ keywords = [
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "License :: OSI Approved :: MIT License",
   "Framework :: FastAPI",
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
@@ -39,22 +40,12 @@ dependencies = [
 
   # Data Processing
   "pandas>=2.3.3",
-  "numpy>=2.4.0",
   "openpyxl>=3.1",
-
-  # Classical ML
-  "scikit-learn>=1.8.0",
-
-  # NLP & Transformers
-  "torch>=2.9.1",
-  "transformers>=4.57.3",
-  "sentence-transformers>=5.2.0",
-  "langchain-huggingface>=1.2.0",
 
   # LLM Provider (supports OpenAI, Anthropic, Ollama, Azure, Groq, etc.)
   "litellm>=1.83.3",
 
-  # Vector Store (Local RAG)
+  # Vector Store (Local RAG; ships its own ONNX embedder)
   "chromadb>=1.4.0",
 
   # Persistence
@@ -62,11 +53,17 @@ dependencies = [
 
   # Logging & Observability
   "structlog>=25.5.0",
+]
 
-  # Utilities
-  "tqdm>=4.67.1",
-
-  # Frontend
+[project.optional-dependencies]
+# HuggingFace transformer engine (hf_transformer). On Linux, torch comes
+# from the CPU-only index (see [tool.uv.sources]) to keep images small.
+ml = [
+  "torch>=2.9.1",
+  "transformers>=4.57.3",
+]
+# Streamlit UI
+frontend = [
   "streamlit>=1.56.0",
   "plotly>=6.1.0",
   "requests>=2.32.0",
@@ -78,6 +75,8 @@ test = [
   "pytest-cov>=5.0",
   "pytest-asyncio>=0.24",
   "Faker>=35.0",
+  "numpy>=2.0",
+  "requests>=2.32.0",
 ]
 
 dev = [
@@ -90,9 +89,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/saladgg/sentiment-analyzer" # todo
+Homepage = "https://github.com/saladgg/sentiment-analyzer"
 Repository = "https://github.com/saladgg/sentiment-analyzer"
-Documentation = "https://github.com/saladgg/sentiment-analyzer/docs"
+Documentation = "https://github.com/saladgg/sentiment-analyzer/tree/main/docs"
 Changelog = "https://github.com/saladgg/sentiment-analyzer/releases"
 
 # ----------------------------------------------------------
@@ -106,6 +105,19 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 include-package-data = true
 
+# ----------------------------------------------------------
+# uv: CPU-only torch on Linux (CUDA wheels add several GB).
+# For a GPU build, drop this source or point it at a CUDA index.
+# ----------------------------------------------------------
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["sentiment_analyzer*"]
@@ -117,10 +129,19 @@ include = ["sentiment_analyzer*"]
 [tool.ruff]
 line-length = 100
 target-version = "py313"
-src = ["sentiment_analyzer", "tests"]
+src = ["sentiment_analyzer", "tests", "frontend"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "C4", "SIM"]
+select = ["E", "F", "I", "UP", "B", "C4", "SIM", "S", "ASYNC", "RUF", "BLE"]
+ignore = [
+  "RUF012",  # mutable class defaults are idiomatic for pydantic models
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "S108", "S603"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["sentiment_analyzer"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
@@ -139,12 +160,20 @@ source = ["sentiment_analyzer"]
 
 [tool.coverage.report]
 show_missing = true
-skip_covered = false
+skip_covered = true
+fail_under = 90
 
 [tool.mypy]
 strict = false
 ignore_missing_imports = true
-files = ["sentiment_analyzer", "tests"]
+check_untyped_defs = true
+files = ["sentiment_analyzer", "tests", "frontend"]
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = ["sentiment_analyzer.*"]
+disallow_untyped_defs = false
+disallow_incomplete_defs = true
 
 # ----------------------------------------------------------
 # PSR Configuration
@@ -154,7 +183,7 @@ files = ["sentiment_analyzer", "tests"]
 [tool.semantic_release]
 commit_parser = "conventional"
 version_toml = [
-    "pyproject.toml:project.version:tf"
+    "pyproject.toml:project.version:nf"
 ]
 branch = "main"
 build_command = "python -m build"

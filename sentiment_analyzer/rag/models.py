@@ -8,23 +8,35 @@ These models define the contract between:
 - API responses
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
-@dataclass
+@dataclass(frozen=True)
 class RAGChunk:
-    """A single chunk of retrieved context with its source and relevance score."""
+    """A single retrieved chunk with its provenance and relevance score."""
 
     content: str
     source: str
     score: float
+    document_id: str = ""
+    namespace: str = ""
+    chunk_id: str = ""
 
 
 @dataclass
 class RAGResult:
-    """Aggregated RAG retrieval output including all chunks and assembled context."""
+    """Context retrieved for one text: the chunks and their joined content."""
 
-    enabled: bool
-    context: str
-    sources: list[str]
-    chunks: list[RAGChunk]
+    chunks: list[RAGChunk] = field(default_factory=list)
+
+    @property
+    def context(self) -> str:
+        return "\n".join(c.content for c in self.chunks)
+
+    @property
+    def sources(self) -> list[str]:
+        return sorted({c.source for c in self.chunks if c.source})
+
+    @property
+    def chunk_ids(self) -> list[str]:
+        return [c.chunk_id for c in self.chunks]

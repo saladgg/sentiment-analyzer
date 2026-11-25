@@ -1,8 +1,11 @@
 """
-Tests for the evaluation harness metrics.
+Unit tests for the evaluation harness.
 """
 
+from __future__ import annotations
+
 import pytest
+
 from sentiment_analyzer.evaluation.harness import EvaluationHarness
 
 
@@ -11,54 +14,40 @@ def harness() -> EvaluationHarness:
     return EvaluationHarness()
 
 
-class TestPrecision:
-    def test_returns_value_in_unit_interval(self, harness):
-        accuracy = harness.precision(
-            ["positive", "negative", "positive"],
-            ["positive", "negative", "negative"],
-        )
-        assert 0.0 <= accuracy <= 1.0
-
-    def test_perfect_match(self, harness):
-        assert harness.precision(["a", "b", "c"], ["a", "b", "c"]) == 1.0
-
-    def test_no_match(self, harness):
-        assert harness.precision(["a", "a"], ["b", "b"]) == 0.0
+class TestAccuracy:
+    def test_partial_match(self, harness):
+        assert harness.accuracy(["a", "b", "a"], ["a", "b", "b"]) == pytest.approx(2 / 3)
 
     def test_empty_inputs_return_zero(self, harness):
-        assert harness.precision([], []) == 0.0
+        assert harness.accuracy([], []) == 0.0
 
     def test_misaligned_lengths_raise(self, harness):
         with pytest.raises(ValueError):
-            harness.precision(["a", "b"], ["a"])
+            harness.accuracy(["a"], ["a", "b"])
 
 
-class TestDrift:
-    def test_returns_zero_for_identical_distributions(self, harness):
-        assert harness.drift([0.1, 0.2, 0.3], [0.1, 0.2, 0.3]) == 0.0
+class TestReport:
+    def test_per_class_metrics_and_confusion_matrix(self, harness):
+        predictions = ["positive", "positive", "negative", "neutral"]
+        labels = ["positive", "negative", "negative", "negative"]
+        report = harness.report(predictions, labels)
 
-    def test_returns_absolute_mean_delta(self, harness):
-        assert harness.drift([1.0, 1.0], [0.0, 0.0]) == pytest.approx(1.0)
+        assert report["accuracy"] == 0.5
+        assert report["per_class"]["positive"] == {
+            "precision": 0.5,
+            "recall": 1.0,
+            "f1": 0.6667,
+            "support": 1,
+        }
+        assert report["per_class"]["negative"]["recall"] == pytest.approx(0.3333, abs=1e-4)
+        # neutral has no support, so it doesn't count towards macro-F1
+        assert report["macro_f1"] == pytest.approx((0.6667 + 0.5) / 2, abs=1e-4)
+        assert report["confusion_matrix"] == {
+            "labels": ["negative", "neutral", "positive"],
+            "matrix": [[1, 1, 1], [0, 0, 0], [0, 0, 1]],
+        }
 
-    def test_handles_negative_drift_as_absolute(self, harness):
-        assert harness.drift([0.0, 0.0], [1.0, 1.0]) == pytest.approx(1.0)
-
-    @pytest.mark.parametrize("a,b", [([], [0.1]), ([0.1], []), ([], [])])
-    def test_empty_runs_return_zero(self, harness, a, b):
-        assert harness.drift(a, b) == 0.0
-
-
-class TestStability:
-    def test_returns_zero_for_single_value(self, harness):
-        assert harness.stability([0.5]) == 0.0
-
-    def test_returns_zero_for_empty_input(self, harness):
-        assert harness.stability([]) == 0.0
-
-    def test_constant_scores_have_zero_variance(self, harness):
-        assert harness.stability([0.5, 0.5, 0.5]) == 0.0
-
-    def test_variance_increases_with_spread(self, harness):
-        tight = harness.stability([0.4, 0.5, 0.6])
-        wide = harness.stability([0.1, 0.5, 0.9])
-        assert wide > tight
+    def test_empty(self, harness):
+        report = harness.report([], [])
+        assert report["total_samples"] == 0
+        assert report["macro_f1"] == 0.0

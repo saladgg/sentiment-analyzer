@@ -1,44 +1,48 @@
 """
-Tests for dataset-level analytics: aggregation, anomaly detection,
-explainability, per-record assembly, run comparison, and time-bucket
-aggregation.
+Unit tests for the analytics layer: aggregation, anomalies,
+explanations, run comparison and time-based aggregation.
 """
 
 from __future__ import annotations
 
+from typing import Any
+
+import pytest
+
 from sentiment_analyzer.analytics.aggregation import aggregate
 from sentiment_analyzer.analytics.anomalies import detect_anomalies
 from sentiment_analyzer.analytics.explainability import explain_record
-from sentiment_analyzer.analytics.llm_explainability import LLMExplainer
-from sentiment_analyzer.analytics.per_record import build_per_record_result
 from sentiment_analyzer.analytics.run_comparison import compare_runs
 from sentiment_analyzer.analytics.time_aggregation import aggregate_by_time
+from sentiment_analyzer.core.errors import ConflictError
 
 
 class TestAggregate:
-    def test_counts_distribution_and_dominant_label(self, sample_records):
+    def test_counts_distribution_and_averages(self, sample_records):
         summary = aggregate(sample_records)
         assert summary["total_records"] == 3
-        assert summary["distribution"] == {
-            "positive": 1,
-            "negative": 1,
-            "neutral": 1,
-        }
-        assert summary["dominant_sentiment"] in {"positive", "negative", "neutral"}
+        assert summary["distribution"] == {"positive": 1, "negative": 1, "neutral": 1}
+        assert summary["avg_score"] == pytest.approx(0.0333, abs=1e-4)
+        assert summary["avg_confidence"] == pytest.approx(0.5667, abs=1e-4)
+
+    def test_ties_break_in_fixed_order(self, sample_records):
+        assert aggregate(sample_records)["dominant_sentiment"] == "positive"
+        assert aggregate(sample_records[1:])["dominant_sentiment"] == "neutral"
 
     def test_majority_label_wins(self):
-        records = [{"sentiment": "positive", "score": s} for s in (0.1, 0.2, 0.3)]
-        records.append({"sentiment": "negative", "score": -0.1})
-        summary = aggregate(records)
-        assert summary["dominant_sentiment"] == "positive"
+        records = [{"sentiment": s, "score": 0} for s in ["negative", "negative", "positive"]]
+        assert aggregate(records)["dominant_sentiment"] == "negative"
+
+    def test_failed_records_are_excluded(self, sample_records):
+        summary = aggregate([*sample_records, {"error": "boom", "sentiment": None}])
+        assert summary["total_records"] == 3
+        assert summary["failed_records"] == 1
 
     def test_empty_input(self):
         summary = aggregate([])
-        assert summary == {
-            "total_records": 0,
-            "distribution": {},
-            "dominant_sentiment": None,
-        }
+        assert summary["total_records"] == 0
+        assert summary["dominant_sentiment"] is None
+        assert summary["avg_score"] is None
 
 
 class TestDetectAnomalies:
@@ -46,128 +50,110 @@ class TestDetectAnomalies:
         assert detect_anomalies([{"score": 0.5}]) == []
 
     def test_no_anomalies_when_scores_are_constant(self):
-        records = [{"record_id": i, "score": 0.5} for i in range(5)]
+        assert detect_anomalies([{"score": 0.1}] * 5) == []
+
+    def test_flags_outlier_with_z_score(self):
+        records = [{"record_id": i, "score": 0.1} for i in range(10)]
+        records.append({"record_id": 99, "score": -0.9})
+        anomalies = detect_anomalies(records)
+        assert [a["record_id"] for a in anomalies] == [99]
+        assert anomalies[0]["z_score"] < -2
+
+    def test_ignores_failed_records(self):
+        records = [{"score": 0.1}] * 10 + [{"score": None, "error": "x"}]
         assert detect_anomalies(records) == []
-
-    def test_flags_outlier_above_threshold(self):
-        records = [
-            *[{"record_id": i, "score": 0.0} for i in range(20)],
-            {"record_id": 99, "score": 5.0},  # extreme outlier
-        ]
-        anomalies = detect_anomalies(records, threshold=2.0)
-        assert any(r["record_id"] == 99 for r in anomalies)
-
-    def test_threshold_is_respected(self):
-        records = [
-            {"record_id": 0, "score": 0.0},
-            {"record_id": 1, "score": 0.1},
-            {"record_id": 2, "score": -0.1},
-            {"record_id": 3, "score": 0.5},
-        ]
-        # A very high threshold should suppress all anomalies.
-        assert detect_anomalies(records, threshold=10.0) == []
 
 
 class TestExplainRecord:
-    def test_renders_label_and_score(self):
-        msg = explain_record({"record_id": 7, "sentiment": "positive", "score": 0.83})
-        assert "Record 7" in msg
-        assert "positive" in msg
-        assert "0.83" in msg
-
-
-class TestPerRecordBuilder:
-    def test_minimal_sentiment_output_without_rag(self):
-        result = build_per_record_result(
-            record_id=0,
-            sentiment_output={"label": "positive", "score": 0.9, "drivers": {"x": 0.5}},
+    def test_renders_label_score_and_confidence(self):
+        text = explain_record(
+            {"record_id": 7, "sentiment": "positive", "score": 0.834, "confidence": 0.9}
         )
-        assert result["record_id"] == 0
-        assert result["sentiment"] == "positive"
-        assert result["score"] == 0.9
-        assert result["contributing_fields"] == {"x": 0.5}
-        assert result["rag"] == {"enabled": False, "sources": [], "chunks_used": 0}
+        assert text == "Record 7 classified as positive with score 0.83 (confidence 0.90)."
 
-    def test_handles_missing_drivers(self):
-        result = build_per_record_result(
-            record_id=1,
-            sentiment_output={"label": "neutral", "score": 0.0},
+    def test_names_the_strongest_field(self):
+        text = explain_record(
+            {
+                "record_id": 1,
+                "sentiment": "negative",
+                "score": -0.2,
+                "contributing_fields": {"title": 0.5, "body": -1.0},
+            }
         )
-        assert result["contributing_fields"] == {}
+        assert "strongest field: 'body' (-1.00)" in text
 
-    def test_with_rag_result(self):
-        class _RAG:
-            sources = ["doc1", "doc2"]
-            chunks = [object(), object(), object()]
-
-        result = build_per_record_result(
-            record_id=2,
-            sentiment_output={"label": "positive", "score": 0.5, "drivers": {}},
-            rag_result=_RAG(),
-        )
-        assert result["rag"] == {
-            "enabled": True,
-            "sources": ["doc1", "doc2"],
-            "chunks_used": 3,
-        }
+    def test_failed_record(self):
+        assert "could not be analyzed: boom" in explain_record({"record_id": 1, "error": "boom"})
 
 
 class TestCompareRuns:
-    def test_detects_helpfulness_via_confidence_gain(self):
-        out = compare_runs(
-            run_without_rag={"summary": {"avg_confidence": 0.5, "label_changes": 0}},
-            run_with_rag={"summary": {"avg_confidence": 0.7, "label_changes": 0}},
-        )
-        assert out["confidence_gain"] == 0.2
-        assert out["label_changes"] == 0
-        assert out["rag_helpfulness"] is True
+    def _run(self, sha="h"):
+        return {"input_sha256": sha}
 
-    def test_detects_helpfulness_via_label_changes(self):
-        out = compare_runs(
-            run_without_rag={"summary": {"avg_confidence": 0.5}},
-            run_with_rag={"summary": {"avg_confidence": 0.5, "label_changes": 3}},
-        )
-        assert out["label_changes"] == 3
-        assert out["rag_helpfulness"] is True
+    def test_counts_label_changes_and_deltas(self):
+        base = [
+            {"record_id": 0, "sentiment": "neutral", "score": 0.0, "confidence": 0.5},
+            {"record_id": 1, "sentiment": "positive", "score": 0.5, "confidence": 0.5},
+            {"record_id": 2, "sentiment": "positive", "score": 0.5, "error": "x"},
+        ]
+        other = [
+            {"record_id": 0, "sentiment": "negative", "score": -0.6, "confidence": 0.9},
+            {"record_id": 1, "sentiment": "positive", "score": 0.7, "confidence": 0.7},
+            {"record_id": 2, "sentiment": "positive", "score": 0.5},
+        ]
+        result = compare_runs(self._run(), base, self._run(), other)
+        assert result["records_compared"] == 2
+        assert result["label_changes"] == 1
+        assert result["label_change_rate"] == 0.5
+        assert result["mean_score_delta"] == pytest.approx(-0.2)
+        assert result["mean_confidence_delta"] == pytest.approx(0.3)
+        assert result["changed_records"][0]["record_id"] == 0
 
-    def test_no_rag_helpfulness_when_unchanged(self):
-        out = compare_runs(
-            run_without_rag={"summary": {"avg_confidence": 0.5}},
-            run_with_rag={"summary": {"avg_confidence": 0.5}},
-        )
-        assert out["confidence_gain"] == 0.0
-        assert out["rag_helpfulness"] is False
+    def test_no_overlap(self):
+        result = compare_runs(self._run(), [], self._run(), [])
+        assert result["records_compared"] == 0
+        assert result["mean_score_delta"] is None
+
+    @pytest.mark.parametrize(("a", "b"), [("h1", "h2"), (None, "h"), ("h", None)])
+    def test_requires_matching_inputs(self, a, b):
+        with pytest.raises(ConflictError):
+            compare_runs(self._run(a), [], self._run(b), [])
 
 
 class TestAggregateByTime:
-    @staticmethod
-    def _records():
-        return [
-            {"ts": "2024-01-01T08:00:00", "score": 0.2},
-            {"ts": "2024-01-01T20:00:00", "score": 0.4},
-            {"ts": "2024-02-15T10:00:00", "score": 0.6},
-            {"ts": "2025-03-01T10:00:00", "score": -0.2},
+    records: list[dict[str, Any]] = [
+        {"sentiment": "positive", "score": 0.5},
+        {"sentiment": "negative", "score": -0.5},
+        {"sentiment": "positive", "score": 1.0},
+    ]
+    timestamps: list[object] = ["2026-01-05T10:00:00", "2026-01-05", "2026-03-01"]
+
+    @pytest.mark.parametrize(
+        ("granularity", "buckets"),
+        [
+            ("day", ["2026-01-05", "2026-03-01"]),
+            ("week", ["2026-W02", "2026-W09"]),
+            ("month", ["2026-01", "2026-03"]),
+            ("year", ["2026"]),
+        ],
+    )
+    def test_granularities(self, granularity, buckets):
+        trend = aggregate_by_time(self.records, self.timestamps, granularity)
+        assert [b["bucket"] for b in trend["buckets"]] == buckets
+
+    def test_bucket_stats(self):
+        trend = aggregate_by_time(self.records, self.timestamps, "month")
+        jan = trend["buckets"][0]
+        assert jan["count"] == 2
+        assert jan["avg_score"] == 0.0
+        assert jan["distribution"] == {"positive": 1, "negative": 1}
+
+    def test_skips_unparseable_and_failed(self):
+        records: list[dict[str, Any]] = [
+            *self.records,
+            {"error": "x"},
+            {"sentiment": "neutral", "score": 0},
         ]
-
-    def test_day_granularity(self):
-        out = aggregate_by_time(self._records(), "ts", granularity="day")
-        assert out["2024-01-01"] == 0.30000000000000004 or out["2024-01-01"] == 0.3
-        assert "2024-02-15" in out
-
-    def test_month_granularity(self):
-        out = aggregate_by_time(self._records(), "ts", granularity="month")
-        assert "2024-01" in out
-        assert "2024-02" in out
-        assert "2025-03" in out
-
-    def test_year_granularity_is_default_for_unknown_value(self):
-        out = aggregate_by_time(self._records(), "ts", granularity="year")
-        assert "2024" in out
-        assert "2025" in out
-
-
-class TestLLMExplainer:
-    def test_renders_label_and_score(self):
-        msg = LLMExplainer().explain({"sentiment": "negative", "score": -0.42})
-        assert "negative" in msg
-        assert "-0.42" in msg
+        trend = aggregate_by_time(records, [*self.timestamps, "2026-01-01", None], "year")
+        assert trend["unparseable"] == 1
+        assert trend["buckets"][0]["count"] == 3

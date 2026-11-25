@@ -1,30 +1,57 @@
 # ==========================================================
 # sentiment-analyzer - Docker Compose
 # ----------------------------------------------------------
-# Single-service compose file for local development.
-# Run: make docker-up
+# API + Streamlit UI for local use.
+# Run: make docker-up   (API on :8000, UI on :8501)
 # ==========================================================
 
 services:
   api:
     build:
       context: .
-      dockerfile: Dockerfile
+      target: api
+    image: sentiment-analyzer-api:local
     container_name: sentiment-analyzer-api
     ports:
       - "8000:8000"
     env_file:
-      - .env
+      - path: .env
+        required: false
+    environment:
+      # Pin all mutable state onto the volume. These take precedence over
+      # .env, whose relative defaults are meant for local (non-Docker) runs.
+      ASA_RUNS_DB_PATH: /app/data/runs.duckdb
+      ASA_VECTOR_STORE_PATH: /app/data/vector_store
+      HF_HOME: /app/data/hf
     volumes:
-      # Persist DuckDB run storage and vector store across restarts
+      # Persist run history, vector store and model caches across restarts
       - run-data:/app/data
     restart: unless-stopped
+    mem_limit: 4g
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 60s
+
+  frontend:
+    build:
+      context: .
+      target: frontend
+    image: sentiment-analyzer-ui:local
+    container_name: sentiment-analyzer-ui
+    ports:
+      - "8501:8501"
+    environment:
+      ASA_API_URL: http://api:8000/api/v1
+      # Must match one of the API's ASA_API_KEYS when auth is enabled.
+      ASA_API_KEY: ${ASA_API_KEY:-}
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 1g
 
 volumes:
   run-data:
