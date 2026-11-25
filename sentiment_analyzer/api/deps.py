@@ -13,6 +13,7 @@ from sentiment_analyzer.core.errors import InputTooLargeError
 from sentiment_analyzer.rag.vector_store import VectorStore
 from sentiment_analyzer.sentiment.registry import EngineRegistry
 from sentiment_analyzer.services.analysis_service import AnalysisService
+from sentiment_analyzer.services.jobs import JobManager
 from sentiment_analyzer.storage.runs import RunStore
 
 
@@ -34,6 +35,10 @@ def get_vector_store(request: Request) -> VectorStore:
 
 def get_engines(request: Request) -> EngineRegistry:
     return request.app.state.engines
+
+
+def get_jobs(request: Request) -> JobManager:
+    return request.app.state.jobs
 
 
 def read_upload(file: UploadFile, max_bytes: int) -> bytes:

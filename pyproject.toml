@@ -53,6 +53,7 @@ dependencies = [
 
   # Logging & Observability
   "structlog>=25.5.0",
+  "prometheus-client>=0.21",
 ]
 
 [project.optional-dependencies]
@@ -148,6 +149,7 @@ pythonpath = ["."]
 testpaths = ["tests"]
 python_files = "test_*.py"
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 addopts = "-ra -q --cov=sentiment_analyzer --cov-report=term-missing"
 filterwarnings = [
     # Upstream: chromadb still uses ``asyncio.iscoroutinefunction``.
@@ -172,7 +174,7 @@ explicit_package_bases = true
 
 [[tool.mypy.overrides]]
 module = ["sentiment_analyzer.*"]
-disallow_untyped_defs = false
+disallow_untyped_defs = true
 disallow_incomplete_defs = true
 
 # ----------------------------------------------------------

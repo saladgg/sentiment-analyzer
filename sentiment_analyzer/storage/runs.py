@@ -18,7 +18,7 @@ import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import duckdb
@@ -87,10 +87,39 @@ def _m2_run_details_and_records(conn: duckdb.DuckDBPyConnection) -> None:
     )
 
 
+def _m3_jobs(conn: duckdb.DuckDBPyConnection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS jobs (
+            job_id TEXT PRIMARY KEY,
+            status TEXT NOT NULL,
+            engine TEXT,
+            source_type TEXT,
+            client_id TEXT,
+            records_total INTEGER,
+            records_done INTEGER,
+            run_id TEXT,
+            error TEXT,
+            created_at TIMESTAMP,
+            started_at TIMESTAMP,
+            finished_at TIMESTAMP
+        )
+        """
+    )
+
+
 MIGRATIONS: list[Callable[[duckdb.DuckDBPyConnection], None]] = [
     _m1_initial,
     _m2_run_details_and_records,
+    _m3_jobs,
 ]
+
+_JOB_COLUMNS = (
+    "job_id, status, engine, source_type, client_id, records_total, records_done, "
+    "run_id, error, created_at, started_at, finished_at"
+)
+JOB_STATUSES = ("queued", "running", "completed", "failed", "cancelled")
+TERMINAL_JOB_STATUSES = ("completed", "failed", "cancelled")
 
 _RUN_COLUMNS = (
     "run_id, engine, summary, rag_enabled, created_at, source_type, input_sha256, "
@@ -342,6 +371,103 @@ class RunStore:
             row = cur.execute(
                 "SELECT count(*) FROM run_records WHERE run_id = ?", (run_id,)
             ).fetchone()
+        return int(row[0]) if row else 0
+
+    # ------------------------------------------------------------------
+    # Background jobs
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _row_to_job(row: tuple) -> dict[str, Any]:
+        job = dict(zip([c.strip() for c in _JOB_COLUMNS.split(",")], row, strict=True))
+        for key in ("created_at", "started_at", "finished_at"):
+            job[key] = _as_utc(job[key])
+        return job
+
+    def create_job(
+        self,
+        job_id: str,
+        *,
+        engine: str,
+        source_type: str,
+        records_total: int,
+        client_id: str | None,
+    ) -> dict[str, Any]:
+        with self._write_lock, self._cursor() as cur:
+            cur.execute(
+                f"INSERT INTO jobs ({_JOB_COLUMNS}) "  # noqa: S608 - constant columns
+                "VALUES (?, 'queued', ?, ?, ?, ?, 0, NULL, NULL, ?, NULL, NULL)",
+                (job_id, engine, source_type, client_id, records_total, _utcnow()),
+            )
+        job = self.get_job(job_id)
+        assert job is not None  # noqa: S101 - just inserted
+        return job
+
+    def update_job(self, job_id: str, **fields: Any) -> None:
+        """Update job columns. ``started_at``/``finished_at`` are set from ``status``."""
+        allowed = {"status", "records_done", "records_total", "run_id", "error"}
+        unknown = set(fields) - allowed
+        if unknown:
+            raise ValueError(f"Unknown job fields: {sorted(unknown)}")
+        assignments = [f"{name} = ?" for name in fields]
+        params: list[Any] = list(fields.values())
+        status = fields.get("status")
+        if status == "running":
+            assignments.append("started_at = ?")
+            params.append(_utcnow())
+        elif status in TERMINAL_JOB_STATUSES:
+            assignments.append("finished_at = ?")
+            params.append(_utcnow())
+        with self._write_lock, self._cursor() as cur:
+            cur.execute(
+                f"UPDATE jobs SET {', '.join(assignments)} WHERE job_id = ?",  # noqa: S608
+                [*params, job_id],
+            )
+
+    def get_job(self, job_id: str) -> dict[str, Any] | None:
+        with self._cursor() as cur:
+            row = cur.execute(
+                f"SELECT {_JOB_COLUMNS} FROM jobs WHERE job_id = ?",  # noqa: S608
+                (job_id,),
+            ).fetchone()
+        return self._row_to_job(row) if row else None
+
+    def list_jobs(
+        self, *, limit: int = 50, offset: int = 0, status: str | None = None
+    ) -> tuple[list[dict[str, Any]], int]:
+        where, params = ("WHERE status = ?", [status]) if status else ("", [])
+        with self._cursor() as cur:
+            total_row = cur.execute(
+                f"SELECT count(*) FROM jobs {where}",  # noqa: S608 - fixed clause
+                params,
+            ).fetchone()
+            rows = cur.execute(
+                f"SELECT {_JOB_COLUMNS} FROM jobs {where} "  # noqa: S608
+                "ORDER BY created_at DESC, job_id LIMIT ? OFFSET ?",
+                [*params, limit, offset],
+            ).fetchall()
+        return [self._row_to_job(r) for r in rows], int(total_row[0]) if total_row else 0
+
+    def fail_unfinished_jobs(self, reason: str) -> int:
+        """Mark queued/running jobs failed (used at startup after a restart)."""
+        with self._write_lock, self._cursor() as cur:
+            row = cur.execute(
+                "SELECT count(*) FROM jobs WHERE status IN ('queued', 'running')"
+            ).fetchone()
+            cur.execute(
+                "UPDATE jobs SET status = 'failed', error = ?, finished_at = ? "
+                "WHERE status IN ('queued', 'running')",
+                (reason, _utcnow()),
+            )
+        return int(row[0]) if row else 0
+
+    def prune_jobs(self, older_than_days: int) -> int:
+        """Delete finished jobs older than the retention window (runs are kept)."""
+        cutoff = _utcnow() - timedelta(days=older_than_days)
+        with self._write_lock, self._cursor() as cur:
+            row = cur.execute(
+                "SELECT count(*) FROM jobs WHERE finished_at < ?", (cutoff,)
+            ).fetchone()
+            cur.execute("DELETE FROM jobs WHERE finished_at < ?", (cutoff,))
         return int(row[0]) if row else 0
 
     def close(self) -> None:

@@ -138,3 +138,47 @@ class TestRAGIntegration:
 def test_fingerprint_is_order_and_key_order_sensitive_only_where_it_matters():
     assert fingerprint([{"a": 1, "b": 2}]) == fingerprint([{"b": 2, "a": 1}])
     assert fingerprint([{"a": 1}, {"a": 2}]) != fingerprint([{"a": 2}, {"a": 1}])
+
+
+class TestLLMUsage:
+    def test_run_summary_totals_usage(self, make_service, fake_llm):
+        result = make_service().run(
+            data="good one\ngood one\nbad one", source_type="text", sentiment_engine="llm"
+        )
+        assert result["summary"]["llm_usage"] == {
+            "requests": 2,
+            "cached": 1,
+            "prompt_tokens": 20,
+            "completion_tokens": 10,
+            "cost_usd": 0.002,
+            "cost_complete": True,
+        }
+
+    def test_unknown_pricing_is_flagged(self, make_service, fake_llm, monkeypatch):
+        from sentiment_analyzer.sentiment import llm
+
+        def _no_price(completion_response):
+            raise ValueError("unmapped")
+
+        monkeypatch.setattr(llm.litellm, "completion_cost", _no_price)
+        usage = make_service().run(data="good", source_type="text", sentiment_engine="llm")[
+            "summary"
+        ]["llm_usage"]
+        assert usage["cost_usd"] == 0.0
+        assert usage["cost_complete"] is False
+
+    def test_free_engines_report_no_usage(self, make_service):
+        result = make_service().run(data="good", source_type="text")
+        assert "llm_usage" not in result["summary"]
+
+    def test_progress_callback_reports_chunks(self, make_service, monkeypatch):
+        from sentiment_analyzer.services import analysis_service
+
+        monkeypatch.setattr(analysis_service, "CHUNK_SIZE", 2)
+        calls: list[tuple[int, int]] = []
+        make_service().run(
+            data="a good\nb good\nc good\nd good\ne good",
+            source_type="text",
+            progress=lambda done, total: calls.append((done, total)),
+        )
+        assert calls == [(0, 5), (2, 5), (4, 5), (5, 5)]

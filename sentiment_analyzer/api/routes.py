@@ -51,6 +51,26 @@ def analyze(request: AnalysisRequest, service: ServiceDep) -> dict[str, Any]:
     )
 
 
+def load_upload(
+    file: UploadFile,
+    *,
+    extension: str,
+    source_type: str,
+    max_bytes: int,
+    max_records: int,
+) -> list[dict[str, Any]]:
+    """Check the extension, read within ``max_bytes``, parse into records."""
+    if not file.filename or not file.filename.lower().endswith(extension):
+        raise UnsupportedInputError(f"Only {extension} files are supported")
+    payload = io.BytesIO(read_upload(file, max_bytes))
+    adapter = (
+        CSVAdapter(max_records=max_records)
+        if source_type == "csv"
+        else ExcelAdapter(max_records=max_records)
+    )
+    return adapter.load(payload)
+
+
 def _analyze_upload(
     *,
     file: UploadFile,
@@ -64,17 +84,15 @@ def _analyze_upload(
     timestamp_field: str | None,
     granularity: Granularity,
 ) -> dict[str, Any]:
-    if not file.filename or not file.filename.lower().endswith(extension):
-        raise UnsupportedInputError(f"Only {extension} files are supported")
-
-    payload = io.BytesIO(read_upload(file, settings.max_upload_bytes))
-    adapter = (
-        CSVAdapter(max_records=settings.max_records)
-        if source_type == "csv"
-        else ExcelAdapter(max_records=settings.max_records)
+    records = load_upload(
+        file,
+        extension=extension,
+        source_type=source_type,
+        max_bytes=settings.max_upload_bytes,
+        max_records=settings.max_records,
     )
     return service.run(
-        data=adapter.load(payload),
+        data=records,
         source_type=source_type,
         sentiment_engine=sentiment_engine,
         text_fields=split_csv_param(text_fields),

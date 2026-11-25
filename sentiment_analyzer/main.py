@@ -14,28 +14,39 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from sentiment_analyzer.api.engine_routes import router as engine_router
 from sentiment_analyzer.api.evaluation_routes import router as evaluation_router
 from sentiment_analyzer.api.health_routes import router as health_router
+from sentiment_analyzer.api.job_routes import router as job_router
 from sentiment_analyzer.api.rag_routes import router as rag_router
 from sentiment_analyzer.api.routes import router as analysis_router
 from sentiment_analyzer.api.run_routes import router as run_router
 from sentiment_analyzer.core.config import Settings, get_settings
 from sentiment_analyzer.core.errors import register_exception_handlers
 from sentiment_analyzer.core.logging import configure_logging, logger
+from sentiment_analyzer.core.metrics import Metrics
 from sentiment_analyzer.core.middleware import BodySizeLimitMiddleware, RequestContextMiddleware
-from sentiment_analyzer.core.security import require_api_key
+from sentiment_analyzer.core.security import RateLimiter, enforce_rate_limit, require_api_key
 from sentiment_analyzer.core.version import app_version
 from sentiment_analyzer.rag.context_enrichment import RAGContextEnricher
 from sentiment_analyzer.rag.vector_store import VectorStore
 from sentiment_analyzer.sentiment.registry import EngineRegistry
 from sentiment_analyzer.services.analysis_service import AnalysisService
+from sentiment_analyzer.services.jobs import JobManager
 from sentiment_analyzer.storage.runs import RunStore
 
-API_ROUTERS = (analysis_router, run_router, rag_router, evaluation_router, engine_router)
+API_ROUTERS = (
+    analysis_router,
+    job_router,
+    run_router,
+    rag_router,
+    evaluation_router,
+    engine_router,
+)
 
 
 def create_app(
@@ -68,7 +79,11 @@ def create_app(
         app.state.run_store = run_store
         app.state.vector_store = vector_store
         app.state.engines = engines
-        app.state.service = AnalysisService(settings, run_store, engines, enricher)
+        service = AnalysisService(settings, run_store, engines, enricher, metrics=metrics)
+        app.state.service = service
+        jobs = JobManager(settings, service, run_store, metrics=metrics)
+        jobs.recover()
+        app.state.jobs = jobs
 
         if settings.warmup_default_engine:
             try:
@@ -86,7 +101,9 @@ def create_app(
         try:
             yield
         finally:
-            run_store.close()
+            if jobs.shutdown():
+                run_store.close()
+            # else: a job still holds the connection; the process is exiting anyway.
 
     docs_enabled = settings.environment != "prod"
     app = FastAPI(
@@ -99,6 +116,11 @@ def create_app(
         openapi_url="/openapi.json" if docs_enabled else None,
     )
     app.state.settings = settings
+    metrics = Metrics()
+    app.state.metrics = metrics
+    app.state.rate_limiter = (
+        RateLimiter(settings.rate_limit_per_minute) if settings.rate_limit_per_minute else None
+    )
 
     # Middleware runs outermost-last: request context wraps everything.
     app.add_middleware(
@@ -109,13 +131,24 @@ def create_app(
         allow_headers=["Content-Type", "X-API-Key", "X-Request-ID"],
         expose_headers=["X-Request-ID"],
     )
-    app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_upload_bytes)
+    app.add_middleware(
+        BodySizeLimitMiddleware,
+        max_bytes=settings.max_upload_bytes,
+        overrides={"/jobs/": settings.max_job_upload_bytes},
+    )
     app.add_middleware(RequestContextMiddleware)
 
     register_exception_handlers(app)
 
     app.include_router(health_router)
-    auth = [Depends(require_api_key)]
+
+    @app.get("/metrics", include_in_schema=False, dependencies=[Depends(require_api_key)])
+    def prometheus_metrics() -> Response:
+        """Prometheus scrape endpoint (needs an API key when auth is enabled)."""
+        return Response(generate_latest(metrics.registry), media_type=CONTENT_TYPE_LATEST)
+
+    # Order matters: auth identifies the client, then the rate limit applies.
+    auth = [Depends(require_api_key), Depends(enforce_rate_limit)]
     for router in API_ROUTERS:
         app.include_router(router, prefix="/api/v1", dependencies=auth)
         app.include_router(router, prefix="/api", dependencies=auth, include_in_schema=False)

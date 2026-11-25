@@ -182,8 +182,12 @@ def stub_hf_transformer(monkeypatch) -> dict[str, Any]:
 
 
 def llm_response(payload: Any) -> SimpleNamespace:
+    """A litellm-like response with 10 prompt + 5 completion tokens."""
     content = payload if isinstance(payload, str) or payload is None else json.dumps(payload)
-    return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=content))])
+    return SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content=content))],
+        usage=SimpleNamespace(prompt_tokens=10, completion_tokens=5),
+    )
 
 
 @pytest.fixture
@@ -214,6 +218,8 @@ def fake_llm(monkeypatch) -> dict[str, Any]:
         )
 
     monkeypatch.setattr(llm.litellm, "completion", _completion)
+    # $0.001 per request, so cost totals are easy to assert.
+    monkeypatch.setattr(llm.litellm, "completion_cost", lambda completion_response: 0.001)
     return state
 
 

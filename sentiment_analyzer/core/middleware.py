@@ -15,6 +15,25 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from sentiment_analyzer.core.logging import logger
 
 REQUEST_ID_HEADER = "x-request-id"
+API_PREFIXES = ("/api/v1", "/api")
+
+
+def route_template(scope: Scope) -> str:
+    """
+    Matched route as a template (``/api/v1/runs/{run_id}``), for metric labels.
+
+    Templates keep label cardinality bounded; unmatched paths collapse to
+    ``"unmatched"``. FastAPI records the route without its router prefix,
+    so the API prefix is re-added from the request path.
+    """
+    template = getattr(scope.get("route"), "path", None)
+    if not template:
+        return "unmatched"
+    path = scope.get("path", "")
+    for prefix in API_PREFIXES:
+        if path.startswith(prefix + "/") and not template.startswith(prefix + "/"):
+            return prefix + template
+    return template
 
 
 class RequestContextMiddleware:
@@ -56,13 +75,21 @@ class RequestContextMiddleware:
             await self.app(scope, receive, send_wrapper)
         finally:
             path = scope.get("path", "")
-            if path not in ("/healthz", "/readyz"):
+            elapsed = time.perf_counter() - started
+            template = route_template(scope)
+            metrics = getattr(getattr(scope.get("app"), "state", None), "metrics", None)
+            if metrics is not None and path != "/metrics":
+                method = str(scope.get("method"))
+                metrics.http_requests.labels(method, template, str(status_code)).inc()
+                metrics.http_latency.labels(method, template).observe(elapsed)
+            if path not in ("/healthz", "/readyz", "/metrics"):
                 logger.info(
                     "http_request",
                     method=scope.get("method"),
                     path=path,
                     status=status_code,
-                    duration_ms=round((time.perf_counter() - started) * 1000, 1),
+                    duration_ms=round(elapsed * 1000, 1),
+                    client=(scope.get("state") or {}).get("client_id"),
                 )
             structlog.contextvars.clear_contextvars()
 
@@ -75,20 +102,34 @@ class BodySizeLimitMiddleware:
     chunked uploads without a length header are bounded too.
     """
 
-    def __init__(self, app: ASGIApp, max_bytes: int):
+    def __init__(
+        self,
+        app: ASGIApp,
+        max_bytes: int,
+        overrides: dict[str, int] | None = None,
+    ):
+        """``overrides`` maps a path fragment (e.g. ``"/jobs/"``) to a larger limit."""
         self.app = app
         self.max_bytes = max_bytes
+        self.overrides = overrides or {}
+
+    def _limit_for(self, path: str) -> int:
+        for fragment, limit in self.overrides.items():
+            if fragment in path:
+                return limit
+        return self.max_bytes
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
 
+        max_bytes = self._limit_for(scope.get("path", ""))
         headers = dict(scope.get("headers") or [])
         declared = headers.get(b"content-length")
         request_id = str((scope.get("state") or {}).get("request_id") or "")
-        if declared is not None and declared.isdigit() and int(declared) > self.max_bytes:
-            await self._reject(send, request_id)
+        if declared is not None and declared.isdigit() and int(declared) > max_bytes:
+            await self._reject(send, request_id, max_bytes)
             return
 
         received = 0
@@ -99,7 +140,7 @@ class BodySizeLimitMiddleware:
             message = await receive()
             if message["type"] == "http.request":
                 received += len(message.get("body", b""))
-                if received > self.max_bytes:
+                if received > max_bytes:
                     raise _BodyTooLarge
             return message
 
@@ -113,13 +154,12 @@ class BodySizeLimitMiddleware:
             await self.app(scope, limited_receive, tracking_send)
         except _BodyTooLarge:
             if not response_started:
-                await self._reject(send, request_id)
+                await self._reject(send, request_id, max_bytes)
 
-    async def _reject(self, send: Send, request_id: str) -> None:
+    async def _reject(self, send: Send, request_id: str, max_bytes: int) -> None:
         body = json.dumps(
             {
-                "detail": f"Request body exceeds the {self.max_bytes} byte limit "
-                "(ASA_MAX_UPLOAD_BYTES)",
+                "detail": f"Request body exceeds the {max_bytes} byte limit",
                 "code": "input_too_large",
                 "request_id": request_id or None,
             }

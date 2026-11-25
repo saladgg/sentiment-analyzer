@@ -17,6 +17,9 @@ import hashlib
 import json
 import time
 import uuid
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Any
 
 from sentiment_analyzer.analytics.aggregation import aggregate
@@ -26,6 +29,7 @@ from sentiment_analyzer.analytics.time_aggregation import Granularity, aggregate
 from sentiment_analyzer.core.config import Settings
 from sentiment_analyzer.core.errors import InputTooLargeError, InvalidInputError
 from sentiment_analyzer.core.logging import logger
+from sentiment_analyzer.core.metrics import Metrics
 from sentiment_analyzer.core.version import app_version
 from sentiment_analyzer.ingestion.json_adapter import JSONAdapter
 from sentiment_analyzer.ingestion.text_adapter import TEXT_FIELD, TextAdapter
@@ -34,9 +38,25 @@ from sentiment_analyzer.processing.normalizer import normalize_record
 from sentiment_analyzer.processing.validator import validate_record
 from sentiment_analyzer.rag.context_enrichment import RAGContextEnricher
 from sentiment_analyzer.rag.models import RAGResult
-from sentiment_analyzer.sentiment.base import SentimentEngine, SentimentResult
+from sentiment_analyzer.sentiment.base import BatchItem, SentimentEngine, SentimentResult
 from sentiment_analyzer.sentiment.registry import EngineRegistry
 from sentiment_analyzer.storage.runs import RunRecord, RunStore
+
+
+@dataclass
+class PreparedInput:
+    """A validated request: parsed records, chosen engine and text fields."""
+
+    engine_name: str
+    engine: SentimentEngine
+    source_type: str
+    raw_records: list[dict[str, Any]]
+    fields: list[str]
+    timestamp_field: str | None = None
+
+
+# Records per engine/RAG call: bounds memory per call and sets progress granularity.
+CHUNK_SIZE = 256
 
 
 def fingerprint(records: list[dict[str, Any]]) -> str:
@@ -59,16 +79,18 @@ class AnalysisService:
         run_store: RunStore,
         engines: EngineRegistry,
         enricher: RAGContextEnricher | None = None,
+        metrics: Metrics | None = None,
     ):
         self.settings = settings
         self.run_store = run_store
         self.engines = engines
         self.enricher = enricher
+        self.metrics = metrics
 
     # ------------------------------------------------------------------
     # Input handling
     # ------------------------------------------------------------------
-    def _load_records(self, data: Any, source_type: str) -> list[dict[str, Any]]:
+    def _load_records(self, data: Any, source_type: str, max_records: int) -> list[dict[str, Any]]:
         if source_type == "text":
             records = TextAdapter().load(data)
         else:
@@ -76,11 +98,13 @@ class AnalysisService:
                 records = JSONAdapter().load(data)
             except ValueError as exc:
                 raise InvalidInputError(str(exc)) from exc
-        if len(records) > self.settings.max_records:
-            raise InputTooLargeError(
-                f"Input has more than {self.settings.max_records} records "
-                "(ASA_MAX_RECORDS); split it into smaller batches"
+        if len(records) > max_records:
+            hint = (
+                "submit it as a background job (POST /api/v1/jobs/analyze)"
+                if max_records == self.settings.max_records
+                else "split it into smaller batches"
             )
+            raise InputTooLargeError(f"Input has more than {max_records} records; {hint}")
         return records
 
     def _resolve_text_fields(
@@ -106,6 +130,63 @@ class AnalysisService:
             )
         return detected
 
+    def check_record_limits(self, count: int, engine_name: str, *, background: bool) -> None:
+        """Raise 413 if ``count`` records exceed the limits for this engine and mode."""
+        engine_cls = self.engines.engine_class(engine_name)
+        if background:
+            total, paid = self.settings.max_job_records, self.settings.max_llm_job_records
+            total_var, paid_var = "ASA_MAX_JOB_RECORDS", "ASA_MAX_LLM_JOB_RECORDS"
+        else:
+            total, paid = self.settings.max_records, self.settings.max_llm_records
+            total_var, paid_var = "ASA_MAX_RECORDS", "ASA_MAX_LLM_RECORDS"
+        if count > total:
+            raise InputTooLargeError(f"Input has more than {total} records ({total_var})")
+        if engine_cls.is_paid and count > paid:
+            hint = "" if background else "; larger runs can be submitted as background jobs"
+            raise InputTooLargeError(
+                f"The {engine_name} engine accepts at most {paid} records per run "
+                f"({paid_var}){hint}"
+            )
+
+    @contextmanager
+    def _timer(self, kind: str, engine_name: str = "") -> Iterator[None]:
+        started = time.perf_counter()
+        try:
+            yield
+        finally:
+            if self.metrics:
+                elapsed = time.perf_counter() - started
+                if kind == "rag":
+                    self.metrics.rag_latency.observe(elapsed)
+                else:
+                    self.metrics.inference_latency.labels(engine_name).observe(elapsed)
+
+    def _usage_totals(self, outputs: list[BatchItem]) -> dict[str, Any] | None:
+        """Sum per-record usage (paid engines); also feeds the LLM metrics."""
+        usages = [
+            o.usage for o in outputs if isinstance(o, SentimentResult) and o.usage is not None
+        ]
+        if not usages:
+            return None
+        billed = [u for u in usages if not u.cached]
+        costs = [u.cost_usd for u in billed]
+        totals: dict[str, Any] = {
+            "requests": len(billed),
+            "cached": len(usages) - len(billed),
+            "prompt_tokens": sum(u.prompt_tokens for u in billed),
+            "completion_tokens": sum(u.completion_tokens for u in billed),
+            "cost_usd": round(sum(c for c in costs if c is not None), 6),
+            # False when the provider's pricing is unknown for some requests.
+            "cost_complete": all(c is not None for c in costs),
+        }
+        if self.metrics:
+            self.metrics.llm_calls.labels("api").inc(totals["requests"])
+            self.metrics.llm_calls.labels("cache").inc(totals["cached"])
+            self.metrics.llm_tokens.labels("prompt").inc(totals["prompt_tokens"])
+            self.metrics.llm_tokens.labels("completion").inc(totals["completion_tokens"])
+            self.metrics.llm_cost.inc(totals["cost_usd"])
+        return totals
+
     def _truncate(self, text: str) -> tuple[str, bool]:
         limit = self.settings.max_text_chars
         return (text[:limit], True) if len(text) > limit else (text, False)
@@ -123,22 +204,81 @@ class AnalysisService:
         use_rag: bool | None = None,
         timestamp_field: str | None = None,
         granularity: Granularity = "day",
+        background: bool = False,
+        progress: Callable[[int, int], None] | None = None,
     ) -> dict[str, Any]:
-        """Execute a full analysis pipeline, persist it, and return the results."""
+        """
+        Execute a full analysis pipeline, persist it, and return the results.
+
+        ``background=True`` applies the larger job limits
+        (``ASA_MAX_JOB_RECORDS`` / ``ASA_MAX_LLM_JOB_RECORDS``).
+        ``progress(done, total)`` is called after each chunk of records.
+        """
         started = time.perf_counter()
+        prepared = self.prepare(
+            data,
+            source_type,
+            sentiment_engine,
+            text_fields=text_fields,
+            timestamp_field=timestamp_field,
+            background=background,
+        )
+        return self.run_prepared(
+            prepared,
+            use_rag=use_rag,
+            granularity=granularity,
+            progress=progress,
+            started=started,
+        )
+
+    def prepare(
+        self,
+        data: Any,
+        source_type: str,
+        sentiment_engine: str | None = None,
+        *,
+        text_fields: list[str] | None = None,
+        timestamp_field: str | None = None,
+        background: bool = False,
+    ) -> PreparedInput:
+        """
+        Parse and validate a request without running it.
+
+        Raises the same 4xx errors ``run`` would (unknown engine, limits,
+        missing fields), so background jobs can be rejected up front.
+        """
         engine_name = str(sentiment_engine or self.settings.default_sentiment_engine)
         engine = self.engines.get(engine_name)
-
-        raw_records = self._load_records(data, source_type)
-        if engine.is_paid and len(raw_records) > self.settings.max_llm_records:
-            raise InputTooLargeError(
-                f"The {engine_name} engine accepts at most {self.settings.max_llm_records} "
-                "records per run (ASA_MAX_LLM_RECORDS)"
-            )
+        max_records = self.settings.max_job_records if background else self.settings.max_records
+        raw_records = self._load_records(data, source_type, max_records)
+        self.check_record_limits(len(raw_records), engine_name, background=background)
 
         fields = self._resolve_text_fields(raw_records, source_type, text_fields)
         if timestamp_field and raw_records and all(timestamp_field not in r for r in raw_records):
             raise InvalidInputError(f"timestamp_field {timestamp_field!r} not found in the input")
+        return PreparedInput(
+            engine_name=engine_name,
+            engine=engine,
+            source_type=source_type,
+            raw_records=raw_records,
+            fields=fields,
+            timestamp_field=timestamp_field,
+        )
+
+    def run_prepared(
+        self,
+        prepared: PreparedInput,
+        *,
+        use_rag: bool | None = None,
+        granularity: Granularity = "day",
+        progress: Callable[[int, int], None] | None = None,
+        started: float | None = None,
+    ) -> dict[str, Any]:
+        """Run the pipeline on input already validated by :meth:`prepare`."""
+        started = time.perf_counter() if started is None else started
+        engine_name, engine = prepared.engine_name, prepared.engine
+        source_type, raw_records = prepared.source_type, prepared.raw_records
+        fields, timestamp_field = prepared.fields, prepared.timestamp_field
 
         run_id = str(uuid.uuid4())
         logger.info("analysis_started", run_id=run_id, engine=engine_name, records=len(raw_records))
@@ -155,19 +295,30 @@ class AnalysisService:
             kept.append((idx, normalized, text, truncated))
         texts = [text for _, _, text, _ in kept]
 
-        # Optional RAG enrichment: one batched query, only for engines that use it.
+        # Optional RAG enrichment, only for engines that use it.
         rag_requested = self.settings.rag_enabled if use_rag is None else use_rag
         if use_rag and self.enricher is None:
             raise InvalidInputError("RAG was requested but is disabled (ASA_RAG_ENABLED=false)")
         rag_active = bool(rag_requested and self.enricher and engine.uses_context)
-        rag_results: list[RAGResult | None] = (
-            list(self.enricher.enrich_batch(texts))
-            if rag_active and self.enricher and texts
-            else [None] * len(texts)
-        )
-        contexts = [r.context if r and r.chunks else None for r in rag_results]
 
-        outputs = engine.analyze_batch(texts, contexts) if texts else []
+        # Inference in chunks: bounded memory per call and progress reporting.
+        rag_results: list[RAGResult | None] = []
+        outputs: list[BatchItem] = []
+        if progress:
+            progress(0, len(texts))
+        for start in range(0, len(texts), CHUNK_SIZE):
+            chunk = texts[start : start + CHUNK_SIZE]
+            chunk_rag: list[RAGResult | None] = [None] * len(chunk)
+            if rag_active and self.enricher:
+                with self._timer("rag"):
+                    chunk_rag = list(self.enricher.enrich_batch(chunk))
+            contexts = [r.context if r and r.chunks else None for r in chunk_rag]
+            with self._timer("engine", engine_name):
+                outputs.extend(engine.analyze_batch(chunk, contexts))
+            rag_results.extend(chunk_rag)
+            if progress:
+                progress(len(outputs), len(texts))
+
         field_scores = self._field_contributions(engine, kept, fields)
 
         records: list[dict[str, Any]] = []
@@ -178,6 +329,9 @@ class AnalysisService:
             records.append(record)
 
         summary = aggregate(records)
+        usage = self._usage_totals(outputs)
+        if usage is not None:
+            summary["llm_usage"] = usage
         anomalies = detect_anomalies(records)
         explanations = [explain_record(r) for r in records]
 
@@ -221,6 +375,12 @@ class AnalysisService:
             ),
             records=records,
         )
+
+        status = "completed_with_errors" if failed else "completed"
+        if self.metrics:
+            self.metrics.runs.labels(engine_name, status).inc()
+            self.metrics.records.labels(engine_name, "ok").inc(len(records) - failed)
+            self.metrics.records.labels(engine_name, "failed").inc(failed)
 
         logger.info(
             "analysis_completed",

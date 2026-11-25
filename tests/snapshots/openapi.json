@@ -1,0 +1,3552 @@
+{
+  "components": {
+    "schemas": {
+      "ABTestResponse": {
+        "description": "The same input analyzed without and with RAG, plus the diff.",
+        "properties": {
+          "base": {
+            "$ref": "#/components/schemas/AnalysisResponse"
+          },
+          "comparison": {
+            "$ref": "#/components/schemas/RunComparison"
+          },
+          "rag": {
+            "$ref": "#/components/schemas/AnalysisResponse"
+          }
+        },
+        "required": [
+          "base",
+          "rag",
+          "comparison"
+        ],
+        "title": "ABTestResponse",
+        "type": "object"
+      },
+      "AccuracyRequest": {
+        "properties": {
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Labels",
+            "type": "array"
+          },
+          "predictions": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Predictions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "predictions",
+          "labels"
+        ],
+        "title": "AccuracyRequest",
+        "type": "object"
+      },
+      "AccuracyResponse": {
+        "properties": {
+          "metric": {
+            "const": "accuracy",
+            "title": "Metric",
+            "type": "string"
+          },
+          "report": {
+            "$ref": "#/components/schemas/EvaluationReport"
+          },
+          "total_samples": {
+            "title": "Total Samples",
+            "type": "integer"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "metric",
+          "value",
+          "total_samples",
+          "report"
+        ],
+        "title": "AccuracyResponse",
+        "type": "object"
+      },
+      "AnalysisRequest": {
+        "description": "Represents a sentiment analysis request.\n\ndata:\n    Raw input payload:\n    - List of dicts (JSON rows) for ``json`` / ``csv`` / ``excel``\n    - Plain text string for ``text`` (one record per non-empty line)\nsource_type:\n    Explicit source identifier: 'csv', 'excel', 'json', 'text'\nsentiment_engine:\n    Which sentiment engine to use. Defaults to\n    ``ASA_DEFAULT_SENTIMENT_ENGINE``.\ntext_fields:\n    Columns to analyze. Auto-detected when omitted.\nuse_rag:\n    Force RAG enrichment on/off for this run. Defaults to\n    ``ASA_RAG_ENABLED``. Only engines that read context use it.\ntimestamp_field / granularity:\n    When set, the response includes a sentiment trend over time.",
+        "examples": [
+          {
+            "data": [
+              {
+                "comment": "I love this product"
+              },
+              {
+                "comment": "This is terrible"
+              }
+            ],
+            "sentiment_engine": "rule_based",
+            "source_type": "json"
+          },
+          {
+            "data": "Great service!\nThe delivery was late.",
+            "source_type": "text"
+          }
+        ],
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Data"
+          },
+          "granularity": {
+            "default": "day",
+            "enum": [
+              "day",
+              "week",
+              "month",
+              "year"
+            ],
+            "title": "Granularity",
+            "type": "string"
+          },
+          "sentiment_engine": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EngineName"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_type": {
+            "enum": [
+              "json",
+              "csv",
+              "excel",
+              "text"
+            ],
+            "title": "Source Type",
+            "type": "string"
+          },
+          "text_fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text Fields"
+          },
+          "timestamp_field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp Field"
+          },
+          "use_rag": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Use Rag"
+          }
+        },
+        "required": [
+          "data",
+          "source_type"
+        ],
+        "title": "AnalysisRequest",
+        "type": "object"
+      },
+      "AnalysisResponse": {
+        "description": "Complete response payload for an analysis run.",
+        "properties": {
+          "anomalies": {
+            "items": {
+              "$ref": "#/components/schemas/Anomaly"
+            },
+            "title": "Anomalies",
+            "type": "array"
+          },
+          "engine": {
+            "title": "Engine",
+            "type": "string"
+          },
+          "explanations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Explanations",
+            "type": "array"
+          },
+          "input_sha256": {
+            "title": "Input Sha256",
+            "type": "string"
+          },
+          "rag": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RAGMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/RecordSentiment"
+            },
+            "title": "Records",
+            "type": "array"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/Summary"
+          },
+          "text_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Text Fields",
+            "type": "array"
+          },
+          "trend": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Trend"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "run_id",
+          "engine",
+          "input_sha256",
+          "text_fields",
+          "summary",
+          "records",
+          "anomalies",
+          "explanations"
+        ],
+        "title": "AnalysisResponse",
+        "type": "object"
+      },
+      "Anomaly": {
+        "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "contributing_fields": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "default": {},
+            "title": "Contributing Fields",
+            "type": "object"
+          },
+          "drivers": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "default": {},
+            "title": "Drivers",
+            "type": "object"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "rag": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordRAG"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "record_id": {
+            "title": "Record Id",
+            "type": "integer"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "sentiment": {
+            "anyOf": [
+              {
+                "enum": [
+                  "positive",
+                  "neutral",
+                  "negative"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sentiment"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "z_score": {
+            "title": "Z Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "record_id",
+          "sentiment",
+          "score",
+          "z_score"
+        ],
+        "title": "Anomaly",
+        "type": "object"
+      },
+      "Body_analyze_csv_api_v1_analyze_csv_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_analyze_csv_api_v1_analyze_csv_post",
+        "type": "object"
+      },
+      "Body_analyze_excel_api_v1_analyze_excel_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_analyze_excel_api_v1_analyze_excel_post",
+        "type": "object"
+      },
+      "Body_submit_csv_api_v1_jobs_analyze_csv_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_submit_csv_api_v1_jobs_analyze_csv_post",
+        "type": "object"
+      },
+      "Body_submit_excel_api_v1_jobs_analyze_excel_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_submit_excel_api_v1_jobs_analyze_excel_post",
+        "type": "object"
+      },
+      "Body_upload_document_api_v1_rag_documents_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_document_api_v1_rag_documents_post",
+        "type": "object"
+      },
+      "ChangedRecord": {
+        "properties": {
+          "base_score": {
+            "title": "Base Score",
+            "type": "number"
+          },
+          "base_sentiment": {
+            "enum": [
+              "positive",
+              "neutral",
+              "negative"
+            ],
+            "title": "Base Sentiment",
+            "type": "string"
+          },
+          "other_score": {
+            "title": "Other Score",
+            "type": "number"
+          },
+          "other_sentiment": {
+            "enum": [
+              "positive",
+              "neutral",
+              "negative"
+            ],
+            "title": "Other Sentiment",
+            "type": "string"
+          },
+          "record_id": {
+            "title": "Record Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "record_id",
+          "base_sentiment",
+          "other_sentiment",
+          "base_score",
+          "other_score"
+        ],
+        "title": "ChangedRecord",
+        "type": "object"
+      },
+      "ClassMetrics": {
+        "properties": {
+          "f1": {
+            "title": "F1",
+            "type": "number"
+          },
+          "precision": {
+            "title": "Precision",
+            "type": "number"
+          },
+          "recall": {
+            "title": "Recall",
+            "type": "number"
+          },
+          "support": {
+            "title": "Support",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "precision",
+          "recall",
+          "f1",
+          "support"
+        ],
+        "title": "ClassMetrics",
+        "type": "object"
+      },
+      "ComparisonStats": {
+        "properties": {
+          "label_change_rate": {
+            "title": "Label Change Rate",
+            "type": "number"
+          },
+          "label_changes": {
+            "title": "Label Changes",
+            "type": "integer"
+          },
+          "mean_confidence_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Confidence Delta"
+          },
+          "mean_score_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Score Delta"
+          },
+          "records_compared": {
+            "title": "Records Compared",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "records_compared",
+          "label_changes",
+          "label_change_rate",
+          "mean_score_delta",
+          "mean_confidence_delta"
+        ],
+        "title": "ComparisonStats",
+        "type": "object"
+      },
+      "ConfusionMatrix": {
+        "properties": {
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Labels",
+            "type": "array"
+          },
+          "matrix": {
+            "items": {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "title": "Matrix",
+            "type": "array"
+          }
+        },
+        "required": [
+          "labels",
+          "matrix"
+        ],
+        "title": "ConfusionMatrix",
+        "type": "object"
+      },
+      "EngineEvaluationRequest": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LabeledText"
+            },
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          },
+          "sentiment_engine": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EngineName"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "EngineEvaluationRequest",
+        "type": "object"
+      },
+      "EngineEvaluationResponse": {
+        "properties": {
+          "engine": {
+            "title": "Engine",
+            "type": "string"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "report": {
+            "$ref": "#/components/schemas/EvaluationReport"
+          }
+        },
+        "required": [
+          "engine",
+          "failed",
+          "report"
+        ],
+        "title": "EngineEvaluationResponse",
+        "type": "object"
+      },
+      "EngineInfo": {
+        "properties": {
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "default": {
+            "title": "Default",
+            "type": "boolean"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "is_paid": {
+            "title": "Is Paid",
+            "type": "boolean"
+          },
+          "loaded": {
+            "title": "Loaded",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "uses_context": {
+            "title": "Uses Context",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "display_name",
+          "description",
+          "uses_context",
+          "is_paid",
+          "configured",
+          "loaded",
+          "default"
+        ],
+        "title": "EngineInfo",
+        "type": "object"
+      },
+      "EngineList": {
+        "properties": {
+          "engines": {
+            "items": {
+              "$ref": "#/components/schemas/EngineInfo"
+            },
+            "title": "Engines",
+            "type": "array"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/Limits"
+          },
+          "rag_enabled": {
+            "title": "Rag Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "engines",
+          "limits",
+          "rag_enabled"
+        ],
+        "title": "EngineList",
+        "type": "object"
+      },
+      "EngineName": {
+        "description": "Sentiment engines selectable by clients.",
+        "enum": [
+          "rule_based",
+          "hf_transformer",
+          "llm"
+        ],
+        "title": "EngineName",
+        "type": "string"
+      },
+      "EvaluationReport": {
+        "properties": {
+          "accuracy": {
+            "title": "Accuracy",
+            "type": "number"
+          },
+          "confusion_matrix": {
+            "$ref": "#/components/schemas/ConfusionMatrix"
+          },
+          "macro_f1": {
+            "title": "Macro F1",
+            "type": "number"
+          },
+          "per_class": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ClassMetrics"
+            },
+            "title": "Per Class",
+            "type": "object"
+          },
+          "total_samples": {
+            "title": "Total Samples",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_samples",
+          "accuracy",
+          "macro_f1",
+          "per_class",
+          "confusion_matrix"
+        ],
+        "title": "EvaluationReport",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "Health": {
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "version"
+        ],
+        "title": "Health",
+        "type": "object"
+      },
+      "Job": {
+        "description": "A background analysis job. ``run_id`` is set once it completes.",
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "engine": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engine"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "progress": {
+            "title": "Progress",
+            "type": "number"
+          },
+          "records_done": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Records Done"
+          },
+          "records_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Records Total"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "source_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Type"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "status",
+          "engine",
+          "source_type",
+          "records_total",
+          "records_done",
+          "progress",
+          "run_id",
+          "error",
+          "created_at",
+          "started_at",
+          "finished_at"
+        ],
+        "title": "Job",
+        "type": "object"
+      },
+      "JobPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Job"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "JobPage",
+        "type": "object"
+      },
+      "LLMUsage": {
+        "description": "Totals for paid-engine calls in one run.",
+        "properties": {
+          "cached": {
+            "title": "Cached",
+            "type": "integer"
+          },
+          "completion_tokens": {
+            "title": "Completion Tokens",
+            "type": "integer"
+          },
+          "cost_complete": {
+            "title": "Cost Complete",
+            "type": "boolean"
+          },
+          "cost_usd": {
+            "title": "Cost Usd",
+            "type": "number"
+          },
+          "prompt_tokens": {
+            "title": "Prompt Tokens",
+            "type": "integer"
+          },
+          "requests": {
+            "title": "Requests",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "requests",
+          "cached",
+          "prompt_tokens",
+          "completion_tokens",
+          "cost_usd",
+          "cost_complete"
+        ],
+        "title": "LLMUsage",
+        "type": "object"
+      },
+      "LabeledText": {
+        "properties": {
+          "label": {
+            "enum": [
+              "positive",
+              "neutral",
+              "negative"
+            ],
+            "title": "Label",
+            "type": "string"
+          },
+          "text": {
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "label"
+        ],
+        "title": "LabeledText",
+        "type": "object"
+      },
+      "Limits": {
+        "properties": {
+          "max_llm_records": {
+            "title": "Max Llm Records",
+            "type": "integer"
+          },
+          "max_records": {
+            "title": "Max Records",
+            "type": "integer"
+          },
+          "max_text_chars": {
+            "title": "Max Text Chars",
+            "type": "integer"
+          },
+          "max_upload_bytes": {
+            "title": "Max Upload Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "max_upload_bytes",
+          "max_records",
+          "max_text_chars",
+          "max_llm_records"
+        ],
+        "title": "Limits",
+        "type": "object"
+      },
+      "RAGMetadata": {
+        "description": "Metadata describing RAG usage for an analysis run.",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "source_count": {
+            "default": 0,
+            "title": "Source Count",
+            "type": "integer"
+          },
+          "used": {
+            "title": "Used",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled",
+          "used"
+        ],
+        "title": "RAGMetadata",
+        "type": "object"
+      },
+      "RagDeleteResponse": {
+        "properties": {
+          "document_id": {
+            "title": "Document Id",
+            "type": "string"
+          },
+          "status": {
+            "const": "deleted",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "document_id"
+        ],
+        "title": "RagDeleteResponse",
+        "type": "object"
+      },
+      "RagDocument": {
+        "properties": {
+          "document_id": {
+            "title": "Document Id",
+            "type": "string"
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "required": [
+          "document_id"
+        ],
+        "title": "RagDocument",
+        "type": "object"
+      },
+      "RagUploadResponse": {
+        "properties": {
+          "chunks_added": {
+            "title": "Chunks Added",
+            "type": "integer"
+          },
+          "document_id": {
+            "title": "Document Id",
+            "type": "string"
+          },
+          "filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename"
+          },
+          "namespace": {
+            "title": "Namespace",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id",
+          "filename",
+          "namespace",
+          "chunks_added"
+        ],
+        "title": "RagUploadResponse",
+        "type": "object"
+      },
+      "Readiness": {
+        "properties": {
+          "checks": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Checks",
+            "type": "object"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "not_ready"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "checks"
+        ],
+        "title": "Readiness",
+        "type": "object"
+      },
+      "RecordRAG": {
+        "description": "RAG context used for one record.",
+        "properties": {
+          "chunks_used": {
+            "default": 0,
+            "title": "Chunks Used",
+            "type": "integer"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "sources": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "RecordRAG",
+        "type": "object"
+      },
+      "RecordSentiment": {
+        "description": "Sentiment result for a single record.\n\n``score`` is the polarity in [-1, 1]; ``confidence`` is in [0, 1].\n``contributing_fields`` maps each text field to its own polarity;\n``drivers`` holds engine-specific signals. On failure, ``error`` is\nset and the sentiment fields are null.",
+        "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "contributing_fields": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "default": {},
+            "title": "Contributing Fields",
+            "type": "object"
+          },
+          "drivers": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "default": {},
+            "title": "Drivers",
+            "type": "object"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "rag": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordRAG"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "record_id": {
+            "title": "Record Id",
+            "type": "integer"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "sentiment": {
+            "anyOf": [
+              {
+                "enum": [
+                  "positive",
+                  "neutral",
+                  "negative"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sentiment"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "record_id",
+          "sentiment",
+          "score"
+        ],
+        "title": "RecordSentiment",
+        "type": "object"
+      },
+      "RetrieveHit": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "namespace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "required": [
+          "content",
+          "source",
+          "document_id",
+          "namespace",
+          "score"
+        ],
+        "title": "RetrieveHit",
+        "type": "object"
+      },
+      "RetrieveRequest": {
+        "properties": {
+          "namespace": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Namespace"
+          },
+          "query": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          },
+          "top_k": {
+            "anyOf": [
+              {
+                "maximum": 50.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top K"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "RetrieveRequest",
+        "type": "object"
+      },
+      "RunComparison": {
+        "properties": {
+          "base_run_id": {
+            "title": "Base Run Id",
+            "type": "string"
+          },
+          "changed_records": {
+            "items": {
+              "$ref": "#/components/schemas/ChangedRecord"
+            },
+            "title": "Changed Records",
+            "type": "array"
+          },
+          "comparison": {
+            "$ref": "#/components/schemas/ComparisonStats"
+          },
+          "rag_run_id": {
+            "title": "Rag Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "base_run_id",
+          "rag_run_id",
+          "comparison",
+          "changed_records"
+        ],
+        "title": "RunComparison",
+        "type": "object"
+      },
+      "RunDetail": {
+        "properties": {
+          "config": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Config",
+            "type": "object"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "engine": {
+            "title": "Engine",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "input_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Sha256"
+          },
+          "rag_enabled": {
+            "title": "Rag Enabled",
+            "type": "boolean"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/StoredRecord"
+            },
+            "title": "Records",
+            "type": "array"
+          },
+          "records_failed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Records Failed"
+          },
+          "records_in": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Records In"
+          },
+          "records_limit": {
+            "title": "Records Limit",
+            "type": "integer"
+          },
+          "records_offset": {
+            "title": "Records Offset",
+            "type": "integer"
+          },
+          "records_skipped": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Records Skipped"
+          },
+          "records_total": {
+            "title": "Records Total",
+            "type": "integer"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "source_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Type"
+          },
+          "status": {
+            "default": "completed",
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "additionalProperties": true,
+            "title": "Summary",
+            "type": "object"
+          }
+        },
+        "required": [
+          "run_id",
+          "engine",
+          "summary",
+          "rag_enabled",
+          "created_at",
+          "records",
+          "records_total",
+          "records_limit",
+          "records_offset"
+        ],
+        "title": "RunDetail",
+        "type": "object"
+      },
+      "RunPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RunSummary"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "RunPage",
+        "type": "object"
+      },
+      "RunSummary": {
+        "properties": {
+          "config": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Config",
+            "type": "object"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "engine": {
+            "title": "Engine",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "input_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Sha256"
+          },
+          "rag_enabled": {
+            "title": "Rag Enabled",
+            "type": "boolean"
+          },
+          "records_failed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Records Failed"
+          },
+          "records_in": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Records In"
+          },
+          "records_skipped": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Records Skipped"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "source_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Type"
+          },
+          "status": {
+            "default": "completed",
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "additionalProperties": true,
+            "title": "Summary",
+            "type": "object"
+          }
+        },
+        "required": [
+          "run_id",
+          "engine",
+          "summary",
+          "rag_enabled",
+          "created_at"
+        ],
+        "title": "RunSummary",
+        "type": "object"
+      },
+      "StoredRecord": {
+        "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "contributing_fields": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "default": {},
+            "title": "Contributing Fields",
+            "type": "object"
+          },
+          "drivers": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "default": {},
+            "title": "Drivers",
+            "type": "object"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "rag_chunk_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Rag Chunk Ids",
+            "type": "array"
+          },
+          "record_id": {
+            "title": "Record Id",
+            "type": "integer"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "sentiment": {
+            "anyOf": [
+              {
+                "enum": [
+                  "positive",
+                  "neutral",
+                  "negative"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sentiment"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "record_id",
+          "sentiment",
+          "score"
+        ],
+        "title": "StoredRecord",
+        "type": "object"
+      },
+      "Summary": {
+        "properties": {
+          "avg_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Confidence"
+          },
+          "avg_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Score"
+          },
+          "distribution": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Distribution",
+            "type": "object"
+          },
+          "dominant_sentiment": {
+            "anyOf": [
+              {
+                "enum": [
+                  "positive",
+                  "neutral",
+                  "negative"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dominant Sentiment"
+          },
+          "failed_records": {
+            "default": 0,
+            "title": "Failed Records",
+            "type": "integer"
+          },
+          "llm_usage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LLMUsage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "total_records": {
+            "title": "Total Records",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_records",
+          "distribution",
+          "dominant_sentiment"
+        ],
+        "title": "Summary",
+        "type": "object"
+      },
+      "Trend": {
+        "properties": {
+          "buckets": {
+            "items": {
+              "$ref": "#/components/schemas/TrendBucket"
+            },
+            "title": "Buckets",
+            "type": "array"
+          },
+          "granularity": {
+            "enum": [
+              "day",
+              "week",
+              "month",
+              "year"
+            ],
+            "title": "Granularity",
+            "type": "string"
+          },
+          "unparseable": {
+            "title": "Unparseable",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "granularity",
+          "buckets",
+          "unparseable"
+        ],
+        "title": "Trend",
+        "type": "object"
+      },
+      "TrendBucket": {
+        "properties": {
+          "avg_score": {
+            "title": "Avg Score",
+            "type": "number"
+          },
+          "bucket": {
+            "title": "Bucket",
+            "type": "string"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "distribution": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Distribution",
+            "type": "object"
+          }
+        },
+        "required": [
+          "bucket",
+          "count",
+          "avg_score",
+          "distribution"
+        ],
+        "title": "TrendBucket",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "APIKeyHeader": {
+        "in": "header",
+        "name": "X-API-Key",
+        "type": "apiKey"
+      }
+    }
+  },
+  "info": {
+    "description": "Input-agnostic, explainable sentiment analysis platform",
+    "title": "SentimentAnalyzer"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/analyze": {
+      "post": {
+        "description": "Analyze a JSON list of records, or plain text (``source_type: \"text\"``).\n\nThis is the primary endpoint used by programmatic clients.",
+        "operationId": "analyze_api_v1_analyze_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalysisRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Analyze",
+        "tags": [
+          "Analysis"
+        ]
+      }
+    },
+    "/api/v1/analyze/csv": {
+      "post": {
+        "description": "Analyze sentiment from a UTF-8 CSV file upload.",
+        "operationId": "analyze_csv_api_v1_analyze_csv_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "sentiment_engine",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/EngineName"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sentiment Engine"
+            }
+          },
+          {
+            "description": "Comma-separated columns to analyze; auto-detected when omitted.",
+            "in": "query",
+            "name": "text_fields",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated columns to analyze; auto-detected when omitted.",
+              "title": "Text Fields"
+            }
+          },
+          {
+            "in": "query",
+            "name": "use_rag",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Use Rag"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timestamp_field",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Timestamp Field"
+            }
+          },
+          {
+            "in": "query",
+            "name": "granularity",
+            "required": false,
+            "schema": {
+              "default": "day",
+              "enum": [
+                "day",
+                "week",
+                "month",
+                "year"
+              ],
+              "title": "Granularity",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_analyze_csv_api_v1_analyze_csv_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Analyze Csv",
+        "tags": [
+          "Analysis"
+        ]
+      }
+    },
+    "/api/v1/analyze/excel": {
+      "post": {
+        "description": "Analyze sentiment from an Excel (.xlsx) file upload (first sheet).",
+        "operationId": "analyze_excel_api_v1_analyze_excel_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "sentiment_engine",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/EngineName"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sentiment Engine"
+            }
+          },
+          {
+            "description": "Comma-separated columns to analyze; auto-detected when omitted.",
+            "in": "query",
+            "name": "text_fields",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated columns to analyze; auto-detected when omitted.",
+              "title": "Text Fields"
+            }
+          },
+          {
+            "in": "query",
+            "name": "use_rag",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Use Rag"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timestamp_field",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Timestamp Field"
+            }
+          },
+          {
+            "in": "query",
+            "name": "granularity",
+            "required": false,
+            "schema": {
+              "default": "day",
+              "enum": [
+                "day",
+                "week",
+                "month",
+                "year"
+              ],
+              "title": "Granularity",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_analyze_excel_api_v1_analyze_excel_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Analyze Excel",
+        "tags": [
+          "Analysis"
+        ]
+      }
+    },
+    "/api/v1/engines": {
+      "get": {
+        "description": "Available engines, whether each is configured/loaded, and input limits.",
+        "operationId": "list_engines_api_v1_engines_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EngineList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "List Engines",
+        "tags": [
+          "Engines"
+        ]
+      }
+    },
+    "/api/v1/evaluation/engine": {
+      "post": {
+        "description": "Run an engine over labeled texts and report accuracy, per-class\nprecision/recall/F1, macro-F1 and the confusion matrix.\n\nTexts the engine fails on are counted in ``failed`` and excluded from\nthe metrics. Evaluations are not persisted as runs.",
+        "operationId": "evaluate_engine_api_v1_evaluation_engine_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EngineEvaluationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EngineEvaluationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Evaluate Engine",
+        "tags": [
+          "Evaluation"
+        ]
+      }
+    },
+    "/api/v1/evaluation/sentiment": {
+      "post": {
+        "description": "Score existing predictions against ground-truth labels.\n\nIntended for offline evaluation and benchmarking.",
+        "operationId": "evaluate_sentiment_api_v1_evaluation_sentiment_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccuracyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccuracyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Evaluate Sentiment",
+        "tags": [
+          "Evaluation"
+        ]
+      }
+    },
+    "/api/v1/jobs": {
+      "get": {
+        "description": "List jobs, newest first.",
+        "operationId": "list_jobs_api_v1_jobs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "queued",
+                    "running",
+                    "completed",
+                    "failed",
+                    "cancelled"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "List Jobs",
+        "tags": [
+          "Jobs"
+        ]
+      }
+    },
+    "/api/v1/jobs/analyze": {
+      "post": {
+        "description": "Queue a JSON or plain-text analysis. Returns ``202`` with the job to poll.",
+        "operationId": "submit_analysis_api_v1_jobs_analyze_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalysisRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Submit Analysis",
+        "tags": [
+          "Jobs"
+        ]
+      }
+    },
+    "/api/v1/jobs/analyze/csv": {
+      "post": {
+        "description": "Queue a CSV analysis (up to ``ASA_MAX_JOB_UPLOAD_BYTES``).",
+        "operationId": "submit_csv_api_v1_jobs_analyze_csv_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "sentiment_engine",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/EngineName"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sentiment Engine"
+            }
+          },
+          {
+            "description": "Comma-separated columns to analyze; auto-detected when omitted.",
+            "in": "query",
+            "name": "text_fields",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated columns to analyze; auto-detected when omitted.",
+              "title": "Text Fields"
+            }
+          },
+          {
+            "in": "query",
+            "name": "use_rag",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Use Rag"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timestamp_field",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Timestamp Field"
+            }
+          },
+          {
+            "in": "query",
+            "name": "granularity",
+            "required": false,
+            "schema": {
+              "default": "day",
+              "enum": [
+                "day",
+                "week",
+                "month",
+                "year"
+              ],
+              "title": "Granularity",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_submit_csv_api_v1_jobs_analyze_csv_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Submit Csv",
+        "tags": [
+          "Jobs"
+        ]
+      }
+    },
+    "/api/v1/jobs/analyze/excel": {
+      "post": {
+        "description": "Queue an Excel (.xlsx) analysis (up to ``ASA_MAX_JOB_UPLOAD_BYTES``).",
+        "operationId": "submit_excel_api_v1_jobs_analyze_excel_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "sentiment_engine",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/EngineName"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sentiment Engine"
+            }
+          },
+          {
+            "description": "Comma-separated columns to analyze; auto-detected when omitted.",
+            "in": "query",
+            "name": "text_fields",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated columns to analyze; auto-detected when omitted.",
+              "title": "Text Fields"
+            }
+          },
+          {
+            "in": "query",
+            "name": "use_rag",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Use Rag"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timestamp_field",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Timestamp Field"
+            }
+          },
+          {
+            "in": "query",
+            "name": "granularity",
+            "required": false,
+            "schema": {
+              "default": "day",
+              "enum": [
+                "day",
+                "week",
+                "month",
+                "year"
+              ],
+              "title": "Granularity",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_submit_excel_api_v1_jobs_analyze_excel_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Submit Excel",
+        "tags": [
+          "Jobs"
+        ]
+      }
+    },
+    "/api/v1/jobs/{job_id}": {
+      "delete": {
+        "description": "Cancel a queued job. Running or finished jobs return ``409``.",
+        "operationId": "cancel_job_api_v1_jobs__job_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Cancel Job",
+        "tags": [
+          "Jobs"
+        ]
+      },
+      "get": {
+        "description": "Job status and progress. When ``completed``, fetch ``/runs/{run_id}``.",
+        "operationId": "get_job_api_v1_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Get Job",
+        "tags": [
+          "Jobs"
+        ]
+      }
+    },
+    "/api/v1/rag/documents": {
+      "get": {
+        "description": "List uploaded RAG documents, optionally within one namespace.",
+        "operationId": "list_documents_api_v1_rag_documents_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "namespace",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9_-]{1,64}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Namespace"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RagDocument"
+                  },
+                  "title": "Response List Documents Api V1 Rag Documents Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "List Documents",
+        "tags": [
+          "RAG"
+        ]
+      },
+      "post": {
+        "description": "Upload a UTF-8 text document to be used as RAG context.\n\nThe document is chunked on paragraph/sentence boundaries, embedded,\nand persisted in the vector store.",
+        "operationId": "upload_document_api_v1_rag_documents_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "namespace",
+            "required": false,
+            "schema": {
+              "default": "default",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "title": "Namespace",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_document_api_v1_rag_documents_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RagUploadResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Upload Document",
+        "tags": [
+          "RAG"
+        ]
+      }
+    },
+    "/api/v1/rag/documents/{document_id}": {
+      "delete": {
+        "description": "Delete a document and all its chunks from the vector store.",
+        "operationId": "delete_document_api_v1_rag_documents__document_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RagDeleteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Delete Document",
+        "tags": [
+          "RAG"
+        ]
+      }
+    },
+    "/api/v1/rag/retrieve": {
+      "post": {
+        "description": "Preview what context would be retrieved for a given query.\n\nThis endpoint does NOT affect analysis runs.\nIt is intended for inspection and debugging.",
+        "operationId": "retrieve_context_api_v1_rag_retrieve_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetrieveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RetrieveHit"
+                  },
+                  "title": "Response Retrieve Context Api V1 Rag Retrieve Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Retrieve Context",
+        "tags": [
+          "RAG"
+        ]
+      }
+    },
+    "/api/v1/runs": {
+      "get": {
+        "description": "List past analysis runs, newest first.",
+        "operationId": "list_runs_api_v1_runs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "engine",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/EngineName"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Engine"
+            }
+          },
+          {
+            "in": "query",
+            "name": "rag_enabled",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rag Enabled"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "List Runs",
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/v1/runs/ab": {
+      "post": {
+        "description": "Analyze the same input without and with RAG, and compare the two runs.\n\nOnly meaningful for engines that read context (currently ``llm``).",
+        "operationId": "rag_ab_test_api_v1_runs_ab_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalysisRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ABTestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Rag Ab Test",
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/v1/runs/compare": {
+      "get": {
+        "description": "Compare two runs over the same input, record by record.\n\nTypically ``base_run_id`` is a run without RAG and ``rag_run_id`` the\nsame input with RAG, but any two runs of identical input (e.g. two\nengines) can be compared. Runs of different inputs return 409.",
+        "operationId": "compare_runs_endpoint_api_v1_runs_compare_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "base_run_id",
+            "required": true,
+            "schema": {
+              "title": "Base Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "rag_run_id",
+            "required": true,
+            "schema": {
+              "title": "Rag Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunComparison"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Compare Runs Endpoint",
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/v1/runs/{run_id}": {
+      "get": {
+        "description": "Run metadata, summary, config snapshot and a page of per-record results.",
+        "operationId": "get_run_api_v1_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "records_limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Records Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "records_offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Records Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Get Run",
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/v1/runs/{run_id}/export": {
+      "get": {
+        "description": "Download a run's per-record results as CSV, or the whole run as JSON.",
+        "operationId": "export_run_api_v1_runs__run_id__export_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "default": "csv",
+              "enum": [
+                "csv",
+                "json"
+              ],
+              "title": "Format",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "summary": "Export Run",
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/healthz": {
+      "get": {
+        "description": "Liveness: the process is up. Performs no I/O.",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Healthz",
+        "tags": [
+          "Health"
+        ]
+      }
+    },
+    "/readyz": {
+      "get": {
+        "description": "Readiness: storage, vector store and the default engine are usable.",
+        "operationId": "readyz_readyz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Readiness"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Readiness"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Readyz",
+        "tags": [
+          "Health"
+        ]
+      }
+    }
+  }
+}
