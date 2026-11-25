@@ -2,6 +2,30 @@
 
 <!-- version list -->
 
+## v1.2.0 (2026-11-25)
+
+### Bug Fixes
+
+- **release**: Refresh uv.lock when semantic-release bumps the version
+  ([`608a3fb`](https://github.com/saladgg/sentiment-analyzer/commit/608a3fb98647c7b0fdd20f15477ed1d9d39d764d))
+
+### Documentation
+
+- Document background jobs, auth scopes, rate limiting and metrics
+  ([`22b8ac4`](https://github.com/saladgg/sentiment-analyzer/commit/22b8ac4d7509113b30aa983446a0734171f2a230))
+
+- Point REL-1 at PR #8 and the v1.2.0 release
+  ([`72a3336`](https://github.com/saladgg/sentiment-analyzer/commit/72a3336fa133e36761a12376a8e84b92c5bd3c49))
+
+### Features
+
+- **audit**: Tier 7 - background jobs, rate limiting, metrics, LLM cost
+  ([`ea6edc1`](https://github.com/saladgg/sentiment-analyzer/commit/ea6edc1c97dcf1971e9b88345073e1b3060d1c81))
+
+- **frontend**: Background jobs, RAG A/B, evaluation page, namespace filter
+  ([`71fd8a5`](https://github.com/saladgg/sentiment-analyzer/commit/71fd8a5d31f0912e4fc8c5087b2261ff057c0e3e))
+
+
 ## v1.1.0 (2026-11-25)
 
 ### Bug Fixes
