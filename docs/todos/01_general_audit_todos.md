@@ -4,17 +4,17 @@ Execution checklist for the whole-repo audit. Findings, evidence and code
 references are in [`01_general_audit.md`](01_general_audit.md), and the IDs
 match that file.
 
-> **Status (2026-11-25):** Tiers 0–6 shipped on branch `general-audit`,
-> with regression tests: 260+ tests, 97.8% coverage, a 90% coverage
-> gate, and ruff (incl. bandit/async rules) and mypy
-> (`check_untyped_defs`) clean.
+> **Status (2026-11-25): all items shipped.** Tiers 0–6 landed in PR #1
+> (`v1.1.0`). Tier 7 and the remaining partial items (SEC-1 read-only
+> keys, QUAL-5, ARCH-3, OPS-4 `/metrics`) are on branch `audit-tier7`.
+> Totals: 320+ tests, ~98% coverage with a 90% gate; ruff and mypy
+> (`disallow_untyped_defs` for the package) are clean.
 >
-> Tier 7 is partly shipped. **Still open:** async jobs (ARCH-6b/FEAT-3),
-> rate limiting (FEAT-8), a `/metrics` endpoint (OPS-4), LLM token/cost
-> reporting (FEAT-10), and an API-key write scope (SEC-1, optional).
->
-> **Not yet exercised:** the GHCR publish job (it runs on the first
-> release). The `api` and `frontend` images were built and booted locally.
+> **Release follow-up (REL-1, new):** the `v1.1.0` image publish failed.
+> semantic-release bumped `pyproject.toml` but not `uv.lock`, so the
+> tag's `uv sync --locked` failed. Fixed in PR #7 (the build command
+> refreshes and commits the lock); its `v1.1.1` release republishes the
+> images.
 >
 > **New findings during implementation:** SEC-9 (litellm loading `.env`
 > into `os.environ`), fixed. SEC-10 (263 vulnerable locked dependencies,
@@ -48,8 +48,8 @@ Effort key: **S** ≤ 0.5d · **M** ≤ 2d · **L** > 2d.
 
 - [x] **SEC-1 — API-key auth.** `X-API-Key` on every `/api` route, using
   `secrets.compare_digest`. Boot is refused outside `dev` without keys.
-  Health probes stay open. *The optional read/write key split was not
-  built.*
+  Health probes stay open. Read-only keys (`ASA_API_READ_KEYS`, GET/HEAD
+  only) were added in Tier 7.
 - [x] **SEC-2 — Input limits.** Upload/body bytes are checked by ASGI
   middleware (which also counts streamed chunks) and in `read_upload`;
   also enforced: records (CSV/Excel parse at most N+1 rows), text chars
@@ -137,12 +137,12 @@ Effort key: **S** ≤ 0.5d · **M** ≤ 2d · **L** > 2d.
   delegates; scoring is done in `VectorStore.query_many`.
 - [x] **QUAL-4 — Exception handlers.** `core/errors.py`; the generic 500
   hides internals and carries a `request_id`.
-- [x] **ARCH-3 — Typed API contract.** Response models on every route.
-  *There is no OpenAPI snapshot test; a test asserts the versioned paths
-  instead.*
-- [~] **QUAL-5 — Stricter mypy.** `check_untyped_defs`,
-  `disallow_incomplete_defs`, and `frontend/` is included. *Full
-  `disallow_untyped_defs` is still off.*
+- [x] **ARCH-3 — Typed API contract.** Response models on every route,
+  plus an OpenAPI snapshot test (`tests/test_openapi.py`; regenerate with
+  `UPDATE_SNAPSHOTS=1`).
+- [x] **QUAL-5 — Stricter mypy.** `check_untyped_defs` everywhere,
+  `disallow_untyped_defs` for `sentiment_analyzer.*`, and `frontend/` is
+  included.
 - [x] **QUAL-6 — Chunking module.** `rag/chunking.py`, with
   `ASA_RAG_CHUNK_SIZE`/`_OVERLAP`.
 - [x] **QUAL-7 — Tooling.** Python 3.14 everywhere (`.python-version`,
@@ -157,11 +157,12 @@ Effort key: **S** ≤ 0.5d · **M** ≤ 2d · **L** > 2d.
 
 - [x] **OPS-3 — `/healthz` and `/readyz`.** Docker and compose
   healthchecks use `/healthz`.
-- [~] **OPS-4 — Observability.** Request-ID middleware, one JSON access
-  line per request, stdlib/uvicorn routed through structlog,
-  `ASA_LOG_LEVEL`, tracebacks via `logger.exception`. *`/metrics` was not
-  built (it needs a new dependency); per-run duration and counts are
-  persisted instead.*
+- [x] **OPS-4 — Observability.** Request-ID middleware, one JSON access
+  line per request (with the client id), stdlib/uvicorn routed through
+  structlog, `ASA_LOG_LEVEL`, tracebacks via `logger.exception`.
+  Prometheus `/metrics` covers HTTP by route template, runs, records,
+  engine/RAG latency, LLM tokens/cost/cache and jobs; it's behind the API
+  key and not rate limited.
 - [x] **OPS-5 / SEC-6 — Docker hardening.** Non-root UID 10001, pinned
   `uv:0.10.9`, `--locked` with `--no-install-project` layering, an
   optional `.env`, `mem_limit`, and `api`/`frontend` targets.
@@ -188,18 +189,31 @@ Effort key: **S** ≤ 0.5d · **M** ≤ 2d · **L** > 2d.
 - [x] **TEST-4 — Test settings isolation.** Apps are built from explicit
   `Settings(_env_file=None)`.
 
-## Tier 7 — Later
+## Tier 7 — Later ✅
 
-- [ ] **ARCH-6b / FEAT-3 — Async jobs.** (L) Not started. Runs are still
-  synchronous, bounded by `ASA_MAX_RECORDS`/`ASA_MAX_LLM_RECORDS`.
+- [x] **ARCH-6b / FEAT-3 — Background jobs.** `POST /api/v1/jobs/analyze`
+  (JSON/text, `/csv`, `/excel`) returns `202`; `GET /jobs[/{id}]` gives
+  status and progress, with `run_id` when done; `DELETE` cancels a queued
+  job. Input is validated before queueing (`AnalysisService.prepare`).
+  Job limits are separate and larger. A bounded worker pool and queue
+  (429 when full); a DuckDB `jobs` table (migration 3); jobs left
+  unfinished are failed at startup; old jobs are pruned; shutdown waits a
+  bounded time. *Inputs are held in memory, so jobs don't survive a
+  restart; this is by design for the single-process deployment.* The
+  frontend has a "Background job" mode with a progress bar and a jobs
+  panel.
 - [x] **FEAT-5 — Engine evaluation.** `POST /api/v1/evaluation/engine`
   returns accuracy, per-class P/R/F1, macro-F1 and the confusion matrix.
-  *Results are not persisted.*
+  There's a new Evaluate page in the UI. *Results are not persisted.*
 - [x] **FEAT-7 — Time trend.** `timestamp_field` + `granularity`
   (day/week/month/year); a chart on the Analyze page.
-- [~] **FEAT-8 — Versioning and rate limiting.** `/api/v1` is shipped,
-  with `/api` as a hidden alias. *Rate limiting is not built.*
+- [x] **FEAT-8 — Versioning and rate limiting.** `/api/v1`, with `/api` as a
+  hidden alias. Per-client token bucket (`ASA_RATE_LIMIT_PER_MINUTE`),
+  keyed on the hashed API key or the IP, returning 429 + `Retry-After`.
 - [x] **FEAT-9 — Neutral band and multilingual models.** Star-rating
   labels (e.g. multilingual `nlptown` models) map to polarity.
-- [~] **FEAT-10 — LLM cost guardrails.** Per-run record cap and result
-  cache are shipped. *Token/cost reporting is not built.*
+- [x] **FEAT-10 — LLM cost guardrails.** Per-run record caps, a result
+  cache, and per-record usage (tokens, litellm cost estimate, cache hits)
+  summed into `summary.llm_usage` and exported as metrics.
+- [x] **Frontend gaps (found in the docs review).** RAG on/off control, a
+  RAG A/B mode, the Evaluate page, and a namespace filter on the RAG page.

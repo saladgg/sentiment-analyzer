@@ -47,8 +47,8 @@ browser.
 ## Navigation
 
 `app.py` calls `st.set_page_config` first (wide layout, expanded sidebar),
-then registers three pages with `st.navigation`, grouped as "Analysis"
-(Analyze) and "Platform" (Run History, RAG Management).
+then registers four pages with `st.navigation`, grouped as "Analysis"
+(Analyze, Evaluate) and "Platform" (Run History, RAG Management).
 
 ## Pages
 
@@ -63,22 +63,38 @@ then registers three pages with `st.navigation`, grouped as "Analysis"
 - **Input** — three methods: file upload (CSV / Excel), pasted JSON array,
   or plain text (one record per line).
 - **Options** — comma-separated text fields (empty = auto-detect), a
-  timestamp field, and the trend granularity. Text fields and timestamp are
-  disabled for plain text.
+  timestamp field, the trend granularity, and RAG context (server default /
+  on / off; enabled only for engines that use context). Text fields and
+  timestamp are disabled for plain text.
+- **Mode** — *Run now* (`POST /analyze`), *Background job*
+  (`POST /jobs/analyze...`; the page polls the job every second with a
+  progress bar, then loads the run, showing up to 1,000 records), or
+  *RAG A/B test* (`POST /runs/ab`; pasted JSON/text with the `llm` engine
+  only). The A/B result shows label changes and score/confidence deltas above
+  the RAG run's results.
 - **Results** — counts of analyzed / positive / neutral / negative / failed
   records, dominant label, average score and confidence; RAG metadata when
-  present; run id, engine and text fields used; CSV and JSON download
+  present; LLM usage (requests, cached, tokens, estimated cost) for paid
+  engines; run id, engine and text fields used; CSV and JSON download
   buttons; a list of failed records with their errors.
 - **Charts** — label distribution donut, score histogram, sentiment over time
   (when a timestamp field was given, with a note on unparseable timestamps),
   per-field scores (when more than one text field was analyzed), anomalies,
   and per-record explanations.
 
-The page does not expose `use_rag`; runs use the server default
-(`ASA_RAG_ENABLED`).
+### Evaluate (`pages/evaluate.py`)
+
+Pick an engine and upload a CSV with `text` and `label` columns (labels
+`positive` / `neutral` / `negative`), or use the built-in six-example sample.
+Calls `POST /evaluation/engine` and shows accuracy, macro-F1, evaluated and
+failed counts, the per-class precision/recall/F1 table, and a confusion
+matrix heatmap. Paid engines show a billing warning. Evaluations are not
+saved.
 
 ### Run History (`pages/history.py`)
 
+- **Background jobs** — the 20 most recent jobs with status, progress and
+  run id; queued jobs can be cancelled.
 - **Run list** — paginated, 25 runs per page, with Newer/Older buttons and
   the total count. Columns: run id, engine, status, records in, RAG flag,
   created at.
@@ -93,8 +109,8 @@ The page does not expose `use_rag`; runs use the server default
 ### RAG Management (`pages/rag.py`)
 
 - **Upload** — `.txt`, `.md`, `.csv` or `.json` files (UTF-8) to a namespace.
-- **Stored documents** — lists documents in all namespaces; select one to
-  delete it.
+- **Stored documents** — lists documents, optionally filtered by namespace;
+  select one to delete it.
 - **Semantic search preview** — query, top-k (1-20) and namespace; shows each
   hit's relevance score, source and first 500 characters.
 

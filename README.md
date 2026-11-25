@@ -38,9 +38,12 @@ stored so it can be inspected, exported and compared later.
   record-level run comparison.
 - Evaluation endpoints: accuracy, per-class precision/recall/F1, macro-F1 and
   confusion matrix, for given predictions or for an engine on labelled texts.
-- API-key auth, input limits, JSON errors with request IDs, JSON logs,
-  `/healthz` and `/readyz`.
-- Streamlit UI for analysis, run history and RAG management.
+- Background jobs for large inputs, with progress polling and cancellation.
+- API-key auth (full and read-only keys), per-client rate limiting, input
+  limits, JSON errors with request IDs, JSON logs, `/healthz`, `/readyz` and
+  Prometheus `/metrics` (including LLM tokens and estimated cost).
+- Streamlit UI for analysis (including background jobs and RAG A/B tests),
+  engine evaluation, run history and RAG management.
 
 ## Quick start
 

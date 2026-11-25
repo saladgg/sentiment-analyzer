@@ -45,6 +45,8 @@ and the tables below in sync with `Settings` when you add a setting.
 
 - When `ASA_ENVIRONMENT` is `staging` or `prod` and `ASA_API_KEYS` is empty,
   the process refuses to start (`RuntimeError`).
+- `ASA_API_READ_KEYS` without any `ASA_API_KEYS` is refused too (there would
+  be no way to write).
 - Field constraints (ranges, allowed values) are enforced by pydantic when
   `Settings` is constructed; an invalid value stops startup with a validation
   error.
@@ -64,7 +66,9 @@ and the tables below in sync with `Settings` when you add a setting.
 
 | Variable           | Default                                         | Description                                                                                       |
 | ------------------ | ----------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `ASA_API_KEYS`     | empty                                           | Comma-separated keys accepted in the `X-API-Key` header. Empty disables auth (allowed only in `dev`). |
+| `ASA_API_KEYS`     | empty                                           | Comma-separated full-access keys for the `X-API-Key` header. Empty disables auth (allowed only in `dev`). |
+| `ASA_API_READ_KEYS` | empty                                          | Comma-separated read-only keys: `GET`/`HEAD` only, `403` otherwise. Requires at least one full key. |
+| `ASA_RATE_LIMIT_PER_MINUTE` | `120`                                  | Requests per minute per API key (or client IP without auth); `429` with `Retry-After` when exceeded. `0` disables. Not applied to health probes or `/metrics`. |
 | `ASA_CORS_ORIGINS` | `http://localhost:5173,http://localhost:8501`   | Comma-separated browser origins allowed by CORS.                                                  |
 
 ### Input limits
@@ -77,6 +81,18 @@ and the tables below in sync with `Settings` when you add a setting.
 | `ASA_MAX_LLM_RECORDS`  | `500`              | Maximum records per run for paid engines (`llm`). Larger inputs get `413`.                         |
 
 All four must be greater than zero.
+
+### Background jobs
+
+| Variable                    | Default               | Description                                                                                  |
+| --------------------------- | --------------------- | -------------------------------------------------------------------------------------------- |
+| `ASA_MAX_JOB_RECORDS`       | `100000`              | Maximum records per background job.                                                          |
+| `ASA_MAX_LLM_JOB_RECORDS`   | `5000`                | Maximum records per background job for paid engines.                                         |
+| `ASA_MAX_JOB_UPLOAD_BYTES`  | `104857600` (100 MB)  | Body/file size limit for `/jobs/...` uploads.                                                |
+| `ASA_JOB_WORKERS`           | `1`                   | Jobs run concurrently (1–8). They share the API process's CPU.                                |
+| `ASA_MAX_QUEUED_JOBS`       | `20`                  | Jobs allowed to wait; further submissions get `429` (`job_queue_full`).                      |
+| `ASA_JOB_SHUTDOWN_TIMEOUT`  | `30`                  | Seconds to wait for running jobs on shutdown. Jobs cut off are failed at the next startup.   |
+| `ASA_JOB_RETENTION_DAYS`    | `30`                  | Finished jobs older than this are deleted at startup (their runs are kept).                  |
 
 ### Sentiment engines
 
