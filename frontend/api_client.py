@@ -89,8 +89,15 @@ def analyze_json(
     text_fields: list[str] | None = None,
     timestamp_field: str | None = None,
     granularity: str = "day",
+    use_rag: bool | None = None,
+    path: str = "/analyze",
 ) -> dict:
-    """POST /analyze with a JSON list of records, or plain text (source_type='text')."""
+    """
+    POST a JSON list of records, or plain text (source_type='text').
+
+    ``path`` selects the endpoint: ``/analyze`` (synchronous),
+    ``/jobs/analyze`` (background job) or ``/runs/ab`` (RAG A/B test).
+    """
     body = _clean(
         {
             "data": data,
@@ -101,52 +108,74 @@ def analyze_json(
         }
     )
     body["granularity"] = granularity
-    return _request("POST", "/analyze", json=body)
+    if use_rag is not None:
+        body["use_rag"] = use_rag
+    return _request("POST", path, json=body)
 
 
-def _upload(
-    path: str,
-    file,
-    mime: str,
-    engine: str | None,
-    text_fields: list[str] | None,
-    timestamp_field: str | None,
-    granularity: str,
-) -> dict:
+def _upload(path: str, file, mime: str, engine: str | None, options: dict[str, Any]) -> dict:
+    text_fields = options.get("text_fields")
     params = _clean(
         {
             "sentiment_engine": engine,
             "text_fields": ",".join(text_fields) if text_fields else None,
-            "timestamp_field": timestamp_field,
-            "granularity": granularity,
+            "timestamp_field": options.get("timestamp_field"),
+            "granularity": options.get("granularity", "day"),
         }
     )
+    if options.get("use_rag") is not None:
+        params["use_rag"] = str(options["use_rag"]).lower()
     return _request("POST", path, files={"file": (file.name, file, mime)}, params=params)
 
 
-def analyze_csv(file, engine: str | None = None, **options: Any) -> dict:
-    """POST /analyze/csv with file upload."""
-    return _upload(
-        "/analyze/csv",
-        file,
-        "text/csv",
-        engine,
-        options.get("text_fields"),
-        options.get("timestamp_field"),
-        options.get("granularity", "day"),
-    )
+XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
-def analyze_excel(file, engine: str | None = None, **options: Any) -> dict:
-    """POST /analyze/excel with file upload."""
-    return _upload(
-        "/analyze/excel",
-        file,
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        engine,
-        options.get("text_fields"),
-        options.get("timestamp_field"),
-        options.get("granularity", "day"),
+def analyze_csv(
+    file, engine: str | None = None, *, background: bool = False, **options: Any
+) -> dict:
+    """POST /analyze/csv (or /jobs/analyze/csv when ``background``)."""
+    path = "/jobs/analyze/csv" if background else "/analyze/csv"
+    return _upload(path, file, "text/csv", engine, options)
+
+
+def analyze_excel(
+    file, engine: str | None = None, *, background: bool = False, **options: Any
+) -> dict:
+    """POST /analyze/excel (or /jobs/analyze/excel when ``background``)."""
+    path = "/jobs/analyze/excel" if background else "/analyze/excel"
+    return _upload(path, file, XLSX_MIME, engine, options)
+
+
+# ------------------------------------------------------------------
+# Background jobs
+# ------------------------------------------------------------------
+
+
+def get_job(job_id: str) -> dict:
+    """GET /jobs/{id} — status, progress and run_id once completed."""
+    return _request("GET", f"/jobs/{job_id}")
+
+
+def list_jobs(limit: int = 20, status: str | None = None) -> dict:
+    """GET /jobs — one page: {items, total, limit, offset}."""
+    return _request("GET", "/jobs", params=_clean({"limit": limit, "status": status}))
+
+
+def cancel_job(job_id: str) -> dict:
+    """DELETE /jobs/{id} — cancel a queued job."""
+    return _request("DELETE", f"/jobs/{job_id}")
+
+
+# ------------------------------------------------------------------
+# Evaluation
+# ------------------------------------------------------------------
+
+
+def evaluate_engine(items: list[dict[str, str]], engine: str | None = None) -> dict:
+    """POST /evaluation/engine with [{text, label}, ...]."""
+    return _request(
+        "POST", "/evaluation/engine", json=_clean({"items": items, "sentiment_engine": engine})
     )
 
 
@@ -196,9 +225,9 @@ def upload_rag_document(file, namespace: str = "default") -> dict:
     )
 
 
-def list_rag_documents() -> list[dict]:
-    """GET /rag/documents."""
-    return _request("GET", "/rag/documents")
+def list_rag_documents(namespace: str | None = None) -> list[dict]:
+    """GET /rag/documents, optionally within one namespace."""
+    return _request("GET", "/rag/documents", params=_clean({"namespace": namespace}))
 
 
 def delete_rag_document(document_id: str) -> dict:

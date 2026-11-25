@@ -5,6 +5,7 @@ Analyze page — upload data, pick an engine, visualize results.
 from __future__ import annotations
 
 import json
+import time
 
 import pandas as pd
 import plotly.express as px
@@ -17,10 +18,15 @@ from api_client import (
     analyze_excel,
     analyze_json,
     export_run,
+    get_job,
+    get_run,
     list_engines,
 )
 from theme import ENGINE_DESCRIPTIONS, ENGINE_LABELS, SENTIMENT_COLORS
 
+RUN_NOW = "Run now"
+BACKGROUND = "Background job"
+AB_TEST = "RAG A/B test"
 FILE_INPUT = "File upload (CSV / Excel)"
 JSON_INPUT = "Paste JSON"
 TEXT_INPUT = "Plain text (one per line)"
@@ -119,13 +125,69 @@ with st.expander("Options"):
         )
     with col_gran:
         granularity = st.selectbox("Trend granularity", ["day", "week", "month", "year"])
+    rag_choice = st.radio(
+        "RAG context",
+        ["Server default", "On", "Off"],
+        horizontal=True,
+        help="Only engines that read context (llm) use RAG.",
+        disabled=not by_name[engine].get("uses_context", False),
+    )
+
+mode = st.radio(
+    "Mode",
+    [RUN_NOW, BACKGROUND, AB_TEST],
+    horizontal=True,
+    help=(
+        "Background jobs accept larger inputs and report progress. The RAG A/B test "
+        "analyzes the input twice (without and with RAG) and compares the runs."
+    ),
+)
+if mode == AB_TEST and (input_method == FILE_INPUT or not by_name[engine].get("uses_context")):
+    st.info(
+        "The RAG A/B test needs pasted JSON or text and an engine that uses context (llm).",
+        icon=":material/info:",
+    )
 
 text_fields = [f.strip() for f in fields_raw.split(",") if f.strip()] or None
+use_rag = {"Server default": None, "On": True, "Off": False}[rag_choice]
 options = {
     "text_fields": text_fields,
     "timestamp_field": timestamp_field.strip() or None,
     "granularity": granularity,
+    "use_rag": use_rag if mode != AB_TEST else None,
 }
+
+
+def _result_from_run(detail: dict) -> dict:
+    """Shape a stored run like an analyze response (no anomalies/explanations)."""
+    return {
+        "run_id": detail["run_id"],
+        "engine": detail["engine"],
+        "text_fields": (detail.get("config") or {}).get("text_fields", []),
+        "summary": detail["summary"],
+        "records": detail["records"],
+        "rag": None,
+        "from_job": detail["records_total"],
+    }
+
+
+def _wait_for_job(job: dict) -> dict:
+    """Poll a background job, showing progress, until it finishes."""
+    bar = st.progress(0.0, text="Queued...")
+    cancel_hint = st.caption(f"Job `{job['job_id']}` — also listed under Run History.")
+    while job["status"] in ("queued", "running"):
+        label = (
+            "Queued..."
+            if job["status"] == "queued"
+            else (f"Analyzing {job['records_done'] or 0:,} / {job['records_total'] or 0:,} records")
+        )
+        bar.progress(job["progress"], text=label)
+        time.sleep(1)
+        job = get_job(job["job_id"])
+    bar.progress(1.0 if job["status"] == "completed" else job["progress"], text=job["status"])
+    cancel_hint.empty()
+    return job
+
 
 # ── run analysis ────────────────────────────────────────────────────
 run_btn = st.button("Run Analysis", type="primary", width="stretch")
@@ -141,24 +203,52 @@ if run_btn:
         st.warning("Please paste some text first.")
         st.stop()
 
-    with st.spinner("Running sentiment analysis..."):
-        try:
+    if mode == AB_TEST and (input_method == FILE_INPUT or not by_name[engine].get("uses_context")):
+        st.warning("Pick pasted JSON or text and the llm engine for a RAG A/B test.")
+        st.stop()
+
+    background = mode == BACKGROUND
+    path = {RUN_NOW: "/analyze", BACKGROUND: "/jobs/analyze", AB_TEST: "/runs/ab"}[mode]
+    st.session_state.pop("ab_comparison", None)
+    try:
+        with st.spinner("Submitting..." if background else "Running sentiment analysis..."):
             if input_method == JSON_INPUT:
-                result = analyze_json(json.loads(json_text), engine=engine, **options)
+                response = analyze_json(json.loads(json_text), engine=engine, path=path, **options)
             elif input_method == TEXT_INPUT:
-                result = analyze_json(
-                    plain_text, engine=engine, source_type="text", granularity=granularity
+                response = analyze_json(
+                    plain_text,
+                    engine=engine,
+                    source_type="text",
+                    granularity=granularity,
+                    use_rag=options["use_rag"],
+                    path=path,
                 )
             elif uploaded_file is not None and uploaded_file.name.lower().endswith(".csv"):
-                result = analyze_csv(uploaded_file, engine=engine, **options)
+                response = analyze_csv(
+                    uploaded_file, engine=engine, background=background, **options
+                )
             else:
-                result = analyze_excel(uploaded_file, engine=engine, **options)
-        except json.JSONDecodeError:
-            st.error("Invalid JSON. Please check your input.")
-            st.stop()
-        except APIError as exc:
-            st.error(f"Analysis failed: {exc}")
-            st.stop()
+                response = analyze_excel(
+                    uploaded_file, engine=engine, background=background, **options
+                )
+
+        if background:
+            job = _wait_for_job(response)
+            if job["status"] != "completed":
+                st.error(f"Job {job['status']}: {job.get('error') or 'no result'}")
+                st.stop()
+            result = _result_from_run(get_run(job["run_id"], records_limit=1000))
+        elif mode == AB_TEST:
+            result = response["rag"]
+            st.session_state["ab_comparison"] = response["comparison"]
+        else:
+            result = response
+    except json.JSONDecodeError:
+        st.error("Invalid JSON. Please check your input.")
+        st.stop()
+    except APIError as exc:
+        st.error(f"Analysis failed: {exc}")
+        st.stop()
 
     st.session_state["last_result"] = result
 
@@ -188,6 +278,37 @@ k3.metric("Positive", distribution.get("positive", 0))
 k4.metric("Neutral", distribution.get("neutral", 0))
 k5.metric("Negative", distribution.get("negative", 0))
 k6.metric("Failed", summary.get("failed_records", 0))
+
+ab = st.session_state.get("ab_comparison")
+if ab:
+    stats = ab["comparison"]
+    st.markdown("**RAG A/B test** — the results below are the run *with* RAG.")
+    a1, a2, a3 = st.columns(3)
+    a1.metric("Label changes", stats["label_changes"], f"{stats['label_change_rate']:.0%}")
+    a2.metric(
+        "Mean score Δ",
+        "—" if stats["mean_score_delta"] is None else f"{stats['mean_score_delta']:+.3f}",
+    )
+    a3.metric(
+        "Mean confidence Δ",
+        "—" if stats["mean_confidence_delta"] is None else f"{stats['mean_confidence_delta']:+.3f}",
+    )
+    if ab["changed_records"]:
+        st.dataframe(pd.DataFrame(ab["changed_records"]), width="stretch", hide_index=True)
+
+if result.get("from_job"):
+    st.caption(
+        f"Background job result: showing up to 1,000 of {result['from_job']:,} records. "
+        "Download the export for all of them."
+    )
+
+usage = summary.get("llm_usage")
+if usage:
+    cost = f"${usage['cost_usd']:.4f}" + ("" if usage["cost_complete"] else " (partial)")
+    st.caption(
+        f"LLM usage: {usage['requests']} requests ({usage['cached']} cached), "
+        f"{usage['prompt_tokens']:,} + {usage['completion_tokens']:,} tokens, est. {cost}"
+    )
 
 if summary.get("avg_confidence") is not None:
     st.caption(

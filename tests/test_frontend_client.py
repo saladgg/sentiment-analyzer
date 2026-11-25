@@ -132,3 +132,46 @@ def test_rag_helpers(client_module, monkeypatch):
     client_module.compare_runs("a", "b")
     assert [c.method for c in calls] == ["POST", "GET", "DELETE", "POST", "GET"]
     assert calls[3].json == {"query": "q", "top_k": 2, "namespace": "ns"}
+
+
+def test_job_and_ab_paths(client_module, monkeypatch):
+    calls = _capture(monkeypatch, client_module, _Resp(body={"job_id": "j"}))
+    client_module.analyze_json("a\nb", source_type="text", path="/jobs/analyze", use_rag=False)
+    assert calls[0].url.endswith("/jobs/analyze")
+    assert calls[0].json["use_rag"] is False
+    client_module.analyze_json([{"t": "x"}], path="/runs/ab")
+    assert calls[1].url.endswith("/runs/ab")
+    assert "use_rag" not in calls[1].json
+
+    file = SimpleNamespace(name="x.csv")
+    client_module.analyze_csv(file, background=True, use_rag=True)
+    assert calls[2].url.endswith("/jobs/analyze/csv")
+    assert calls[2].params["use_rag"] == "true"
+    client_module.analyze_excel(file, background=True)
+    assert calls[3].url.endswith("/jobs/analyze/excel")
+
+
+def test_job_helpers(client_module, monkeypatch):
+    calls = _capture(monkeypatch, client_module, _Resp(body={}))
+    client_module.get_job("j1")
+    client_module.list_jobs(limit=5, status="queued")
+    client_module.cancel_job("j1")
+    assert [(c.method, c.url.rsplit("/api/v1", 1)[1]) for c in calls] == [
+        ("GET", "/jobs/j1"),
+        ("GET", "/jobs"),
+        ("DELETE", "/jobs/j1"),
+    ]
+    assert calls[1].params == {"limit": 5, "status": "queued"}
+
+
+def test_evaluate_and_namespace_filter(client_module, monkeypatch):
+    calls = _capture(monkeypatch, client_module, _Resp(body={}))
+    client_module.evaluate_engine([{"text": "x", "label": "neutral"}], engine="rule_based")
+    assert calls[0].json == {
+        "items": [{"text": "x", "label": "neutral"}],
+        "sentiment_engine": "rule_based",
+    }
+    client_module.list_rag_documents("ops")
+    assert calls[1].params == {"namespace": "ops"}
+    client_module.list_rag_documents()
+    assert calls[2].params == {}

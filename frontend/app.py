@@ -19,10 +19,11 @@ st.set_page_config(
 analyze_page = st.Page("pages/analyze.py", title="Analyze", icon=":material/search:", default=True)
 history_page = st.Page("pages/history.py", title="Run History", icon=":material/history:")
 rag_page = st.Page("pages/rag.py", title="RAG Management", icon=":material/library_books:")
+evaluate_page = st.Page("pages/evaluate.py", title="Evaluate", icon=":material/fact_check:")
 
 pg = st.navigation(
     {
-        "Analysis": [analyze_page],
+        "Analysis": [analyze_page, evaluate_page],
         "Platform": [history_page, rag_page],
     }
 )
